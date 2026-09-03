@@ -4,11 +4,17 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
 from app.deps import CurrentUser, DbSession, require_role
+from app.exceptions import ValidationAppError
 from app.models.app_settings import AppSetting
 from app.models.enums import UserRole
 from app.models.users import User
 from app.schemas.settings import AppSettingResponse, AppSettingUpdate
 from app.services.audit import write_audit
+
+# Impostazioni che hanno una pagina propria, con i controlli che servono:
+# `extraction_model` si sceglie fra i modelli installati, e scriverlo qui come
+# JSON grezzo scavalcherebbe quella verifica lasciando l'estrazione rotta.
+CHIAVI_CON_PAGINA = {"extraction_model", "extraction_mode"}
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -26,6 +32,11 @@ async def update_setting(
     db: DbSession,
     user: User = Depends(require_role(UserRole.admin)),
 ) -> Any:
+    if key in CHIAVI_CON_PAGINA:
+        raise ValidationAppError(
+            f"«{key}» si cambia dalla sezione «Lettura automatica dei documenti», "
+            "che verifica che il modello sia davvero installato."
+        )
     setting = await db.get(AppSetting, key)
     if setting is None:
         setting = AppSetting(key=key, value=payload.value, updated_by=user.id)

@@ -30,7 +30,9 @@ router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 _TABELLE = """
     SELECT c.relname AS nome,
            pg_total_relation_size(c.oid) AS byte,
-           c.reltuples::bigint           AS righe_stimate
+           -- `reltuples` vale -1 finché la tabella non è mai stata analizzata:
+           -- è «non lo so», non «meno una riga». A schermo diventa un trattino.
+           greatest(c.reltuples, 0)::bigint AS righe_stimate
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public' AND c.relkind = 'r'
