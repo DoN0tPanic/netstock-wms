@@ -1,0 +1,3 @@
+export type InventoryFilters = { q: string; location: string; vendor: string; category: string; condition: string; status: string; page: number };
+export const defaultInventoryFilters: InventoryFilters = { q: '', location: '', vendor: '', category: '', condition: '', status: '', page: 1 };
+export function readInventoryFilters(key: string): InventoryFilters { try { const stored = JSON.parse(localStorage.getItem(key) ?? 'null') as Partial<InventoryFilters> | null; return stored ? { ...defaultInventoryFilters, ...stored, page: Number(stored.page) || 1 } : defaultInventoryFilters; } catch { return defaultInventoryFilters; } }

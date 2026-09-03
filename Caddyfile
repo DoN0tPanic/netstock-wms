@@ -1,0 +1,64 @@
+{
+    admin off
+    email {$ADMIN_EMAIL:admin@example.com}
+}
+
+# Catch-all HTTPS site: this Caddy instance serves only NetStock, and clients
+# on the LAN reach it by bare IP (no internal DNS record in v1.0), so a
+# hostname-matched site address would fail whenever the client omits SNI for
+# an IP literal (curl and every mainstream browser do this per RFC 6066).
+# Binding on scheme+port only makes Caddy answer regardless of SNI/Host.
+# If a real DNS name (SITE_ADDRESS) is later registered, this still serves it
+# correctly since the block matches everything on port 443.
+https:// {
+    tls /etc/certs/netstock.crt /etc/certs/netstock.key
+
+    encode gzip zstd
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "same-origin"
+        Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+        -Server
+    }
+
+    # Il ripristino carica un dump del database: 80 MB bastano per le foto
+    # delle bolle, non per una copia di un magazzino cresciuto. Il limite vero
+    # è qui, non nell'applicazione: quando il codice Python vede la richiesta,
+    # il corpo è già stato ricevuto per intero.
+    handle /api/v1/maintenance/restore {
+        request_body {
+            max_size 2GB
+        }
+        reverse_proxy api:8000 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    handle /api/* {
+        reverse_proxy api:8000 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    handle /health* {
+        reverse_proxy api:8000 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    handle {
+        reverse_proxy web:80
+    }
+
+    request_body {
+        max_size 80MB
+    }
+}
+
+http:// {
+    redir https://{host}{uri} permanent
+}

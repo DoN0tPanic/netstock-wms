@@ -1,0 +1,57 @@
+.env
+certs/
+*.pem
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+api/.venv/
+node_modules/
+web/dist/
+web/coverage/
+*.log
+.DS_Store
+
+# Documenti usati per tarare l'estrazione: contengono dati di clienti e
+# fornitori. §7.5 dice che le immagini non toccano mai un volume
+# persistente — a maggior ragione non devono finire nella storia di git.
+#
+# Sono esclusi per formato e non per nome, perché il nome lo sceglie chi
+# salva il file: `bolla*` non copre `documento.pdf` né `IMG_4312.HEIC`. Un
+# binario è anche l'unica cosa che check-sensitive.sh non può leggere dentro,
+# quindi qui si ferma prima di `git add`. Se un giorno serve un'immagine
+# davvero pubblica (uno screenshot nella documentazione), si aggiunge con
+# `git add -f` dopo averla guardata.
+bolla*
+samples/
+*.jpeg
+*.jpg
+*.png
+*.gif
+*.bmp
+*.webp
+*.avif
+*.heic
+*.heif
+*.tif
+*.tiff
+*.pdf
+*.doc
+*.docx
+*.odt
+*.ods
+*.eml
+*.msg
+
+# L'elenco dei nomi e dei codici da cercare con check-sensitive.sh. Sta fuori
+# da git per la ragione ovvia: un file che elenca i dati riservati da non
+# pubblicare, pubblicato, li pubblica.
+.sensitive-patterns
+
+# Dump del database: contengono l'audit log, gli hostname e gli indirizzi
+# dell'installazione. La cartella resta, il contenuto no.
+backups/*
+!backups/.gitkeep

@@ -1,0 +1,21 @@
+# Override GPU per Ollama — da sovrapporre al compose base:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile ai up -d
+#
+# Vive in un file separato per una ragione di prodotto: l'estrazione deve
+# funzionare anche su una macchina senza scheda video. Se questa riserva
+# stesse nel compose base, un deploy senza GPU si rifiuterebbe di partire
+# ("could not select device driver") invece di ripiegare sulla CPU.
+# `make up-ai` rileva la GPU e aggiunge questo file da solo.
+#
+# Il modello e la pipeline restano identici nei due casi: la GPU cambia
+# solo la latenza, mai il risultato.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

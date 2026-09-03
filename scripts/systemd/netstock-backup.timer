@@ -1,0 +1,15 @@
+[Unit]
+Description=Backup notturno di NetStock
+
+[Timer]
+# Alle 02:30, prima dei job applicativi delle 02:00-02:15? No: dopo, di
+# proposito. Il backup deve contenere anche ciò che quei job hanno scritto.
+OnCalendar=*-*-* 02:30:00
+# Se la macchina era spenta all'ora prevista, il backup parte all'accensione:
+# su una VM che qualcuno riavvia, senza questo si saltano giorni interi senza
+# che nessuno se ne accorga.
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

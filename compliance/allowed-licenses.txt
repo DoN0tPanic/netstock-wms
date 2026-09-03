@@ -1,0 +1,23 @@
+# Whitelist licenze per NetStock.
+# La pipeline CI di scansione licenze deve fallire se una dipendenza,
+# Python o npm, dichiara una licenza non presente in questo elenco.
+# LGPL non è qui: è ammessa solo dietro ADR esplicito.
+#   ADR attivo: docs/09-adr/0006-ffmpeg-lgpl-in-opencv.md — FFmpeg incluso nel
+#   wheel di OpenCV, che nessun percorso del codice raggiunge.
+#
+# L'inventario di cio' che e' davvero installato sta in licenses.csv
+# (`make licenses` per rigenerarlo). Le note che i metadati dei pacchetti non
+# possono dare — come il caso FFmpeg — stanno in README.md.
+
+MIT
+Apache-2.0
+Apache Software License
+BSD-2-Clause
+BSD-3-Clause
+BSD License
+ISC
+Python Software Foundation License
+PSF
+PostgreSQL
+Unlicense
+MPL-2.0

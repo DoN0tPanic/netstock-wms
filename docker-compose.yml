@@ -1,0 +1,116 @@
+name: netstock
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-netstock}
+      POSTGRES_USER: ${POSTGRES_USER:-netstock}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-netstock} -d ${POSTGRES_DB:-netstock}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://netstock_app:${APP_DB_PASSWORD:?required}@db:5432/${POSTGRES_DB:-netstock}
+      MIGRATE_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-netstock}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-netstock}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?required}
+      SECRET_KEY: ${SECRET_KEY:?required}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?required}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: Europe/Rome
+      EXTRACT_ENABLED: ${EXTRACT_ENABLED:-true}
+      EXTRACT_MODE: ${EXTRACT_MODE:-text}
+      EXTRACT_MODEL: ${EXTRACT_MODEL:-qwen3:4b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      EXTRACT_ALLOW_HEIC: ${EXTRACT_ALLOW_HEIC:-false}
+      EXTRACTION_LOG_RETENTION_DAYS: ${EXTRACTION_LOG_RETENTION_DAYS:-90}
+      METRICS_ENABLED: ${METRICS_ENABLED:-false}
+    volumes:
+      # Sola lettura, e non è timidezza: serve solo a mostrare in Impostazioni
+      # quali copie esistono e quanto pesano. I backup li scrive lo script sul
+      # sistema operativo (timer notturno), che gira come l'utente proprietario
+      # della cartella; il container gira come `app` e non ne è proprietario.
+      # Montarla in scrittura vorrebbe dire allineare gli utenti fra host e
+      # container per un vantaggio che non serve.
+      - ${BACKUP_DIR:-/var/backups/netstock}:/var/backups/netstock:ro
+    tmpfs:
+      - /dev/shm:size=256m
+    networks: [backend, frontend]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks: [frontend]
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    environment:
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      SITE_ADDRESS: ${SITE_ADDRESS:-netstock.local}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api, web]
+    networks: [frontend]
+    security_opt: ["no-new-privileges:true"]
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    profiles: ["ai"]
+    environment:
+      OLLAMA_NOHISTORY: "true"
+      # Il modello resta in memoria. Con un keep-alive breve veniva scaricato
+      # dopo dieci minuti di pausa, e la bolla successiva pagava un minuto di
+      # ricaricamento e inizializzazione CUDA prima ancora di cominciare a
+      # leggere. Occupa ~3,5 GB su una scheda da 8: tenerlo lì costa niente.
+      OLLAMA_KEEP_ALIVE: "-1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+  ollama_models:
+
+networks:
+  frontend:
+  backend:
+    internal: true

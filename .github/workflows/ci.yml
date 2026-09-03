@@ -1,0 +1,114 @@
+name: CI
+
+# La specifica prevede da sempre una scansione dei segreti in CI; questo la
+# rende reale. I tre lavori girano in parallelo: non c'è motivo di aspettare i
+# test per sapere che è stata committata una chiave privata.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sicurezza:
+    name: Segreti e dati sensibili
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tutta la storia, non solo l'ultimo commit: un file cancellato oggi
+          # resta nei commit di ieri, ed è da lì che si recupera.
+          fetch-depth: 0
+
+      - name: Gitleaks su tutta la storia
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            zricethezav/gitleaks:latest detect \
+              --source /repo --config /repo/.gitleaks.toml \
+              --baseline-path /repo/.gitleaks-baseline.json \
+              --redact --no-banner --verbose
+
+      - name: Controllo dati sensibili del progetto
+        # Cerca ciò che Gitleaks non può conoscere: ragioni sociali, codici
+        # interni, nomi derivati dall'ambiente reale. In CI l'elenco locale
+        # (.sensitive-patterns) non c'è — è escluso da git di proposito — e lo
+        # script lo dice invece di fingere di averlo controllato.
+        run: ./scripts/check-sensitive.sh
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx eslint src --max-warnings 20
+      - run: npm run test -- --run
+      # `npm run build` è più severo di `tsc --noEmit`: qui passa o si ferma.
+      - run: npm run build
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: postgres-di-prova
+      APP_DB_PASSWORD: app-di-prova
+      ADMIN_PASSWORD: Admin-Di-Prova-2026!
+      # I test dell'estrazione sostituiscono la chiamata al modello, ma la
+      # funzione esce subito se l'estrazione è spenta: con "false" nove test
+      # ricevevano una proposta vuota. Nessun Ollama serve — l'indirizzo punta
+      # apposta nel vuoto, così una chiamata non prevista fallisce subito.
+      EXTRACT_ENABLED: "true"
+      OLLAMA_BASE_URL: http://127.0.0.1:1
+      DATABASE_URL: postgresql+asyncpg://netstock_app:app-di-prova@localhost:5432/netstock_test
+      MIGRATE_DATABASE_URL: postgresql+asyncpg://netstock:postgres-di-prova@localhost:5432/netstock_test
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: netstock_test
+          POSTGRES_USER: netstock
+          POSTGRES_PASSWORD: postgres-di-prova
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U netstock -d netstock_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Chiave di sessione effimera
+        # Generata a ogni esecuzione invece di essere scritta nel file: una
+        # stringa ad alta entropia committata somiglia a un segreto vero, e
+        # Gitleaks — giustamente — la segnala.
+        run: echo "SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Dipendenze di sistema per OCR e barcode
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng \
+                                      tesseract-ocr-deu libgl1 libglib2.0-0
+      - name: Installazione
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip --quiet
+          pip install --quiet '.[dev]'
+      - name: Migrazioni
+        working-directory: api
+        run: alembic upgrade head
+      - name: Test
+        working-directory: api
+        run: pytest tests/ -q
+      - name: Lint
+        working-directory: api
+        run: ruff check app tests

@@ -1,0 +1,21 @@
+title = "NetStock — configurazione Gitleaks"
+
+# Si parte dalle regole predefinite e si aggiunge soltanto ciò che serve a
+# questo repository. Nessuna esclusione generica del tipo "ignora i test" o
+# "ignora la CI": toglierebbe valore allo strumento proprio dove serve.
+#
+# I riscontri storici già esaminati non stanno qui ma in
+# `.gitleaks-baseline.json`, che è il meccanismo previsto dallo strumento e
+# contiene le impronte, non i valori. Vedi `.gitleaks-baseline.md`.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+compliance/allowed-secrets.txt elenca, uno per uno, i valori che sembrano un
+segreto ma sono stati esaminati e non lo sono: password inventate nei test, MAC
+di documentazione, indirizzi non instradabili. È l'unico file dove una stringa
+del genere sta per essere letta, non per essere usata — quindi qui il riscontro
+è atteso per costruzione.
+"""
+paths = ['compliance/allowed-secrets\.txt']
