@@ -1,5 +1,5 @@
 import { ApiError, apiDownload, apiRequest } from './client';
-import type { AdjustRequest, AppSetting, BackupStatus, RestoreResult, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite } from '../types/api';
+import type { AdjustRequest, AppSetting, ArchivedDocument, BackupStatus, RestoreResult, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite } from '../types/api';
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 const crud = <T, W>(resource: string) => ({
@@ -32,6 +32,14 @@ export const stockApi = { list: (query: Query = {}) => apiRequest<StockAvailabil
 export const inventoryApi = { list: (query: Query = {}) => apiRequest<Page<InventoryRow>>('/inventory', { query }), export: (format: 'csv' | 'xlsx', query: Query = {}) => apiDownload('/inventory/export', { ...query, format }) };
 // L'archivio completo: un solo scarico invece di sette pagine da visitare.
 export const exportApi = { everything: () => apiDownload('/export', {}) };
+// Archivio dei documenti: ricerca propria, separata da quella globale.
+export const documentsApi = {
+  list: (query: Query = {}) => apiRequest<Page<ArchivedDocument>>('/documents', { query }),
+  upload: (file: File, note?: string, deliveryNoteId?: string) => { const body = new FormData(); body.append('file', file); if (note) body.append('note', note); if (deliveryNoteId) body.append('delivery_note_id', deliveryNoteId); return apiRequest<ArchivedDocument>('/documents', { method: 'POST', body }); },
+  text: (id: string) => apiRequest<{ id: string; filename: string; extraction_method: string; text: string }>(`/documents/${id}/testo`),
+  remove: (id: string) => apiRequest<void>(`/documents/${id}`, { method: 'DELETE' }),
+  fileUrl: (id: string) => `/api/v1/documents/${id}/file`,
+};
 export const searchApi = { search: (q: string) => apiRequest<SearchResponse>('/search', { query: { q } }) };
 export const movementsApi = {
   list: (query: Query = {}) => apiRequest<Page<StockMovement>>('/movements', { query }), receive: (body: FreeReceiveRequest) => apiRequest<FreeReceiveResponse>('/movements/receive', { method: 'POST', body }), issue: (body: IssueRequest) => apiRequest<StockMovement[]>('/movements/issue', { method: 'POST', body }), transfer: (body: TransferRequest) => apiRequest<StockMovement[]>('/movements/transfer', { method: 'POST', body }), returnItems: (body: ReturnRequest) => apiRequest<StockMovement[]>('/movements/return', { method: 'POST', body }), rmaOut: (body: RmaMoveRequest) => apiRequest<StockMovement[]>('/movements/rma-out', { method: 'POST', body }), rmaIn: (body: RmaMoveRequest) => apiRequest<StockMovement[]>('/movements/rma-in', { method: 'POST', body }), adjust: (body: AdjustRequest) => apiRequest<StockMovement>('/movements/adjust', { method: 'POST', body }), scrap: (body: ScrapRequest) => apiRequest<StockMovement>('/movements/scrap', { method: 'POST', body }), reverse: (id: string, reason: string) => apiRequest<StockMovement>(`/movements/${id}/reverse`, { method: 'POST', body: { reason } }), export: (format: 'csv' | 'xlsx', dateFrom?: string, dateTo?: string) => apiDownload('/movements/export', { format, date_from: dateFrom, date_to: dateTo }),

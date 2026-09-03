@@ -3,6 +3,7 @@ from app.models.audit import AuditLog
 from app.models.base import Base
 from app.models.catalog import CatalogItem, Category, Location, Supplier, Vendor
 from app.models.delivery import DeliveryNote, DeliveryNoteLine
+from app.models.documents import Document
 from app.models.enums import (
     ItemCondition,
     LocationType,
@@ -29,6 +30,7 @@ __all__ = [
     "CatalogItem",
     "DeliveryNote",
     "DeliveryNoteLine",
+    "Document",
     "StockUnit",
     "StockMovement",
     "Reservation",

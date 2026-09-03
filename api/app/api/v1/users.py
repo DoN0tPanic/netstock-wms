@@ -42,6 +42,7 @@ USER_REFERENCES: tuple[tuple[str, str], ...] = (
     ("extraction_templates", "created_by"),
     ("extraction_runs", "user_id"),
     ("app_settings", "updated_by"),
+    ("documents", "uploaded_by"),
 )
 
 # Gli stessi nomi che l'amministratore legge a schermo (il gemello sta in
@@ -57,6 +58,7 @@ TRACE_LABELS: dict[str, tuple[str, str]] = {
     "extraction_templates": ("template di estrazione", "template di estrazione"),
     "extraction_runs": ("lettura di documenti", "letture di documenti"),
     "app_settings": ("impostazione modificata", "impostazioni modificate"),
+    "documents": ("bolla archiviata", "bolle archiviate"),
 }
 
 

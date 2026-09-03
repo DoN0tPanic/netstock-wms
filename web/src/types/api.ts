@@ -122,3 +122,12 @@ export interface BackupStatus {
   disco: { totale: number; usato: number; libero: number } | null;
 }
 export interface RestoreResult { ok: boolean; messaggio: string; dettaglio: string; stato_precedente_ripristinato: boolean }
+
+export interface ArchivedDocument {
+  id: UUID; filename: string; byte_size: number; pages: number | null;
+  // `testo` = livello di testo del PDF, `ocr` = scansione letta con l'OCR,
+  // `nessuno` = non si è trovato testo. Spiega una ricerca che non trova.
+  extraction_method: 'testo' | 'ocr' | 'nessuno';
+  notes: string | null; delivery_note_id: UUID | null;
+  delivery_note_number: string | null; uploaded_at: ISODateTime;
+}

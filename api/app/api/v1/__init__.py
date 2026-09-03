@@ -7,6 +7,7 @@ from app.api.v1 import (
     catalog_items,
     dashboard,
     delivery_notes,
+    documents,
     extraction,
     inventory,
     maintenance,
@@ -28,6 +29,7 @@ api_router.include_router(registries.suppliers_router)
 api_router.include_router(registries.locations_router)
 api_router.include_router(catalog_items.router)
 api_router.include_router(delivery_notes.router)
+api_router.include_router(documents.router)
 api_router.include_router(units.router)
 api_router.include_router(stock.router)
 api_router.include_router(inventory.router)

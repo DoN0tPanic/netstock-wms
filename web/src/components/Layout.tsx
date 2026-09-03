@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
-import { Boxes, FileText, History, LayoutDashboard, MapPin, Menu, PanelLeftClose, PanelLeftOpen, ScrollText, Settings, Shield, X } from 'lucide-react';
+import { Boxes, FileText, FolderSearch, History, LayoutDashboard, MapPin, Menu, PanelLeftClose, PanelLeftOpen, ScrollText, Settings, Shield, X } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Button, Modal } from './ui';
 import { GlobalSearch } from './GlobalSearch';
 import { useAuth } from '../hooks/useAuth';
 import { useBarraRidotta } from '../hooks/useBarraRidotta';
 import { useHotkeys } from '../hooks/useHotkeys';
-const links = [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }, { to: '/stock', label: 'Magazzino', icon: Boxes }, { to: '/movements', label: 'Movimenti', icon: ScrollText }, { to: '/locations', label: 'Ubicazioni', icon: MapPin }];
+const links = [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }, { to: '/stock', label: 'Magazzino', icon: Boxes }, { to: '/movements', label: 'Movimenti', icon: ScrollText }, { to: '/locations', label: 'Ubicazioni', icon: MapPin }, { to: '/documents', label: 'Archivio bolle', icon: FolderSearch }];
 const adminLinks = [{ to: '/admin/users', label: 'Utenti', icon: Shield }, { to: '/admin/templates', label: 'Template estrazione', icon: FileText }, { to: '/admin/audit', label: 'Audit', icon: History }, { to: '/admin/settings', label: 'Impostazioni', icon: Settings }];
 
 // Ridotta, la voce è la sola icona centrata. `title` non è un di più: senza,

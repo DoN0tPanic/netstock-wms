@@ -22,6 +22,7 @@ const traceLabels: Record<string, [string, string]> = {
   extraction_templates: ["template di estrazione", "template di estrazione"],
   extraction_runs: ["lettura di documenti", "letture di documenti"],
   app_settings: ["impostazione modificata", "impostazioni modificate"],
+  documents: ["bolla archiviata", "bolle archiviate"],
 };
 const describeTraces = (traces: Record<string, number>) =>
   Object.entries(traces).map(([table, count]) => `${count} ${(traceLabels[table] ?? [table, table])[count === 1 ? 0 : 1]}`).join(", ");

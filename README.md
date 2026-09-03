@@ -71,6 +71,16 @@ Fornitori, categorie e ubicazioni **devono esistere già**: crearli al volo da u
 
 La giacenza importata **non è un inserimento nel database**: ogni pezzo passa dalla stessa funzione che registra la merce senza bolla, quindi ha la sua riga nel registro con data (`DATA=`, la data reale dell'inventario), autore e riferimento `GIACENZA-INIZIALE` — che è quello che permette di riconoscerla fra due anni.
 
+## Archivio delle bolle
+
+I PDF delle bolle scansionate si caricano in **Archivio bolle** e si ritrovano cercando quello che c'è scritto **dentro**: il file può chiamarsi `scan_001.pdf`, se contiene «n ordine DEMO-4471» lo trovi cercando `4471`. Funziona anche su un frammento.
+
+Il testo si prende dal livello di testo del PDF quando c'è (le bolle che arrivano per posta), altrimenti con l'OCR (le fotocopie). Quale dei due sia stato usato è scritto accanto a ogni documento: serve quando una ricerca non trova, perché su una scansione storta l'OCR sbaglia qualche carattere — e «Testo letto» mostra esattamente ciò che il sistema ha letto.
+
+**È una sezione stagna**: non compare nella ricerca globale in cima alla pagina, e ha la sua. La ricerca globale porta dritto a un pezzo in magazzino; qui si cerca dentro documenti che citano qualunque cosa, comprese merci mai registrate.
+
+I PDF stanno nel database e non su un volume, quindi il backup notturno li copia insieme al resto: un archivio su disco risulterebbe vuoto al primo ripristino, con i riferimenti ancora al loro posto. Il prezzo è che i backup crescono con l'archivio — la pagina Impostazioni mostra quanto pesa ogni tabella.
+
 ## Certificato e telefoni
 
 L'installazione genera un certificato autofirmato: funziona, ma ogni telefono passa da un avviso di sicurezza, e l'accesso alla fotocamera del lettore di barcode resta appeso a un'eccezione che Android e iOS trattano in modo diverso fra versioni — cioè la funzione su cui si è lavorato di più dipende dalla clemenza del browser.
