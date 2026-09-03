@@ -10,8 +10,10 @@ nomina di sfuggita, e la ricerca globale smetterebbe di essere quella cosa
 che porta dritto al pezzo.
 """
 
+import re
 import uuid
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
@@ -161,16 +163,41 @@ async def carica(
     return (await _con_numero_bolla(db, [documento]))[0]
 
 
+def _disposizione(filename: str, *, allegato: bool) -> str:
+    """Il nome del file dentro un'intestazione HTTP, senza fidarsi del nome.
+
+    Il nome arriva dal caricamento: può contenere virgolette o un a capo, che
+    spezzerebbero l'intestazione, o caratteri fuori da latin-1, l'unica
+    codifica che un'intestazione ammette («bolla città.pdf» passa, un nome in
+    cirillico farebbe fallire la risposta con un errore 500). Si manda quindi
+    un nome ripulito come ripiego e quello vero in `filename*`, che i browser
+    preferiscono (RFC 6266).
+    """
+    ripiego = re.sub(r"[^A-Za-z0-9._ -]", "_", filename).strip() or "documento.pdf"
+    tipo = "attachment" if allegato else "inline"
+    return f"{tipo}; filename=\"{ripiego}\"; filename*=UTF-8\'\'{quote(filename)}"
+
+
 @router.get("/{documento_id}/file")
-async def scarica(documento_id: uuid.UUID, db: DbSession, user: CurrentUser) -> Any:
-    """Il PDF originale, da guardare nel browser."""
+async def file_originale(
+    documento_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    scarica: bool = False,
+) -> Any:
+    """Il PDF originale: da guardare nel browser, o da salvare con `?scarica=1`.
+
+    Sono due gesti diversi e la differenza la decide il server, non il link:
+    con `attachment` il browser salva una copia anche quando ha un lettore di
+    PDF incorporato, che altrimenti si limita ad aprirlo in una scheda.
+    """
     documento = await db.get(Document, documento_id)
     if documento is None:
         raise NotFoundError("Documento non trovato.", details={"id": str(documento_id)})
     return Response(
         content=documento.content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{documento.filename}"'},
+        headers={"Content-Disposition": _disposizione(documento.filename, allegato=scarica)},
     )
 
 

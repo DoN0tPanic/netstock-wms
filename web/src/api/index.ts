@@ -39,6 +39,9 @@ export const documentsApi = {
   text: (id: string) => apiRequest<{ id: string; filename: string; extraction_method: string; text: string }>(`/documents/${id}/testo`),
   remove: (id: string) => apiRequest<void>(`/documents/${id}`, { method: 'DELETE' }),
   fileUrl: (id: string) => `/api/v1/documents/${id}/file`,
+  // Salvare una copia e aprirlo in una scheda sono due gesti diversi: la
+  // differenza la fa `Content-Disposition` lato server, non il link.
+  downloadUrl: (id: string) => `/api/v1/documents/${id}/file?scarica=1`,
 };
 export const searchApi = { search: (q: string) => apiRequest<SearchResponse>('/search', { query: { q } }) };
 export const movementsApi = {

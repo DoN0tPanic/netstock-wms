@@ -14,7 +14,7 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from app.api.v1.documents import carica, elenco, elimina
+from app.api.v1.documents import carica, elenco, elimina, file_originale
 from app.api.v1.documents import testo_estratto as leggi_testo
 from app.exceptions import NotFoundError, ValidationAppError
 from app.models.documents import Document
@@ -195,3 +195,48 @@ async def test_solo_gli_amministratori_cancellano(app_db_session) -> None:
     assert await app_db_session.get(Document, documento.id) is None
     with pytest.raises(NotFoundError):
         await elimina(documento.id, app_db_session, utente)
+
+
+async def test_si_guarda_in_una_scheda_o_si_salva_una_copia(app_db_session) -> None:
+    """Aprire e scaricare sono due gesti diversi, e li distingue il server.
+
+    Un browser con lettore di PDF incorporato, davanti allo stesso link, apre
+    invece di salvare: la copia la ottiene solo `attachment`.
+    """
+    utente = await _utente(app_db_session)
+    dati = _pdf(f"bolla {uuid.uuid4().hex[:6]}")
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile("bolla-di-prova.pdf", dati),
+        note=None, delivery_note_id=None, user=utente,
+    )
+
+    aperto = await file_originale(documento.id, app_db_session, utente)
+    salvato = await file_originale(documento.id, app_db_session, utente, scarica=True)
+
+    assert aperto.headers["content-disposition"].startswith("inline;")
+    assert salvato.headers["content-disposition"].startswith("attachment;")
+    assert salvato.body == dati  # una copia, non una rielaborazione
+
+
+async def test_un_nome_impossibile_non_rompe_la_risposta(app_db_session) -> None:
+    """Il nome del file finisce in un'intestazione HTTP, che è latin-1.
+
+    Un nome con una virgoletta spezzerebbe l'intestazione, uno con caratteri
+    fuori da latin-1 farebbe fallire l'invio della risposta. Il nome vero
+    viaggia percentificato in `filename*`; quello fra virgolette è un ripiego.
+    """
+    utente = await _utente(app_db_session)
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile('bolla "нет"; città.pdf', _pdf(f"bolla {uuid.uuid4().hex[:6]}")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+
+    risposta = await file_originale(documento.id, app_db_session, utente, scarica=True)
+    disposizione = risposta.headers["content-disposition"]
+
+    disposizione.encode("latin-1")  # è ciò che farebbe il server inviandola
+    assert disposizione.count('"') == 2
+    assert "filename*=UTF-8''" in disposizione
+    assert "%D0%BD%D0%B5%D1%82" in disposizione  # il nome vero, per intero

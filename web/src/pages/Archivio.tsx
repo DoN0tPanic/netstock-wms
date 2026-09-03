@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { FileText, Search, Trash2, Upload } from "lucide-react";
+import { Download, FileText, Search, Trash2, Upload } from "lucide-react";
 import { documentsApi } from "../api";
 import type { ArchivedDocument } from "../types/api";
 import { useAuth } from "../hooks/useAuth";
@@ -129,6 +129,10 @@ export function Archivio() {
             { key: "quando", label: "Caricato", render: (riga) => formatDateTime(riga.uploaded_at) },
             { key: "azioni", label: "", render: (riga) => (
               <div className="flex flex-wrap gap-2">
+                <a className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  href={documentsApi.downloadUrl(riga.id)} download={riga.filename}>
+                  <Download size={16} aria-hidden/>Scarica
+                </a>
                 <Button variant="ghost" onClick={() => void mostraTesto(riga)}><Search size={16}/>Testo letto</Button>
                 {can(session?.role, "manage_users") && (
                   <Button variant="ghost" className="text-red-700" onClick={() => setDaEliminare(riga)}><Trash2 size={16}/>Elimina</Button>
