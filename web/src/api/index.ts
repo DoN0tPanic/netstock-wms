@@ -1,5 +1,5 @@
 import { ApiError, apiDownload, apiRequest } from './client';
-import type { AdjustRequest, AppSetting, ArchivedDocument, BackupStatus, RestoreResult, StatoAi, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite } from '../types/api';
+import type { AdjustRequest, AppSetting, ArchivedDocument, BackupStatus, ContoFornitore, RestoreResult, StatoAi, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite } from '../types/api';
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 const crud = <T, W>(resource: string) => ({
@@ -38,6 +38,9 @@ export const documentsApi = {
   upload: (file: File, note?: string, deliveryNoteId?: string) => { const body = new FormData(); body.append('file', file); if (note) body.append('note', note); if (deliveryNoteId) body.append('delivery_note_id', deliveryNoteId); return apiRequest<ArchivedDocument>('/documents', { method: 'POST', body }); },
   text: (id: string) => apiRequest<{ id: string; filename: string; extraction_method: string; text: string }>(`/documents/${id}/testo`),
   remove: (id: string) => apiRequest<void>(`/documents/${id}`, { method: 'DELETE' }),
+  fornitori: () => apiRequest<ContoFornitore[]>('/documents/fornitori'),
+  scegliFornitore: (id: string, supplierId: string | null) => apiRequest<ArchivedDocument>(`/documents/${id}/fornitore`, { method: 'PUT', body: { supplier_id: supplierId } }),
+  riesamina: () => apiRequest<{ esaminati: number; assegnati: number }>('/documents/fornitori/riesamina', { method: 'POST' }),
   fileUrl: (id: string) => `/api/v1/documents/${id}/file`,
   // Salvare una copia e aprirlo in una scheda sono due gesti diversi: la
   // differenza la fa `Content-Disposition` lato server, non il link.

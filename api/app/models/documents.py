@@ -43,6 +43,14 @@ class Document(Base):
     delivery_note_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("delivery_notes.id", ondelete="SET NULL")
     )
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT")
+    )
+    # Come si è arrivati a quel fornitore: `piva`, `intestazione`, `manuale`
+    # (§0006). Vuoto con `supplier_id` a NULL vuol dire «mai riconosciuto»;
+    # `manuale` con NULL vuol dire che una persona ha guardato e ha detto che
+    # non si sa — e il riesame automatico non deve ripassarci sopra.
+    supplier_source: Mapped[str | None] = mapped_column(Text)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -58,6 +66,8 @@ class Document(Base):
         TSVECTOR, server_default=FetchedValue(), nullable=True
     )
 
-    # Il numero della bolla collegata non è una colonna: l'elenco lo calcola
-    # e lo appoggia qui, come fa /movements con i codici leggibili.
+    # Il numero della bolla collegata e il nome del fornitore non sono
+    # colonne: l'elenco li calcola e li appoggia qui, come fa /movements con i
+    # codici leggibili.
     delivery_note_number = None
+    supplier_name = None

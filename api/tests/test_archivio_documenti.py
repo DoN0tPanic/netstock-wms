@@ -14,12 +14,22 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from app.api.v1.documents import carica, elenco, elimina, file_originale
+from app.api.v1.documents import (
+    carica,
+    conteggio_fornitori,
+    elenco,
+    elimina,
+    file_originale,
+    riesamina_fornitori,
+    scegli_fornitore,
+)
 from app.api.v1.documents import testo_estratto as leggi_testo
 from app.exceptions import NotFoundError, ValidationAppError
+from app.models.catalog import Supplier
 from app.models.documents import Document
 from app.models.enums import UserRole
 from app.models.users import User
+from app.schemas.documents import ScegliFornitore
 from app.services import documents_archive
 
 
@@ -240,3 +250,114 @@ async def test_un_nome_impossibile_non_rompe_la_risposta(app_db_session) -> None
     assert disposizione.count('"') == 2
     assert "filename*=UTF-8''" in disposizione
     assert "%D0%BD%D0%B5%D1%82" in disposizione  # il nome vero, per intero
+
+
+async def _fornitore(db, nome: str, piva: str | None = None) -> Supplier:
+    fornitore = Supplier(name=f"{nome} {uuid.uuid4().hex[:6]}", vat_number=piva)
+    db.add(fornitore)
+    await db.flush()
+    return fornitore
+
+
+async def test_la_bolla_finisce_sotto_il_suo_fornitore(app_db_session) -> None:
+    """Il riconoscimento al caricamento, con la prova più forte che c'è."""
+    utente = await _utente(app_db_session)
+    piva = f"9{uuid.uuid4().int % 10**10:010d}"
+    fornitore = await _fornitore(app_db_session, "Distribuzione Prova", piva)
+
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile(
+            "scan001.pdf",
+            _pdf(f"DISTRIB. PROVA - P.IVA {piva} - DDT n. {uuid.uuid4().int % 9999}"),
+        ),
+        note=None, delivery_note_id=None, user=utente,
+    )
+
+    assert documento.supplier_id == fornitore.id
+    assert documento.supplier_source == "piva"
+    assert documento.supplier_name == fornitore.name
+
+
+async def test_senza_riconoscimento_il_documento_resta_da_assegnare(app_db_session) -> None:
+    """Non riconoscere è un esito accettabile: il documento è in archivio, si
+    cerca per contenuto, e il fornitore lo mette una persona."""
+    utente = await _utente(app_db_session)
+
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile("ignoto.pdf", _pdf(f"BOLLA {uuid.uuid4().hex[:6]} merce varia")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+
+    assert documento.supplier_id is None
+    assert documento.supplier_source is None
+
+
+async def test_il_riesame_recupera_le_bolle_di_un_fornitore_aggiunto_dopo(
+    app_db_session,
+) -> None:
+    """Il caso vero: il fornitore lo si crea in anagrafica dopo aver archiviato
+    le sue bolle. Ricaricarle non è una risposta."""
+    utente = await _utente(app_db_session)
+    piva = f"8{uuid.uuid4().int % 10**10:010d}"
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile("prima.pdf", _pdf(f"DITTA NUOVA - P.IVA {piva} - DDT 1")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+    assert documento.supplier_id is None
+
+    fornitore = await _fornitore(app_db_session, "Ditta Nuova", piva)
+    esito = await riesamina_fornitori(app_db_session, utente)
+
+    assert esito["assegnati"] >= 1
+    await app_db_session.refresh(documento)
+    assert documento.supplier_id == fornitore.id
+
+
+async def test_il_riesame_non_torna_sulla_decisione_di_una_persona(
+    app_db_session,
+) -> None:
+    """«Fornitore non noto» deciso a mano deve restare: senza, il riesame
+    rimetterebbe ogni volta quello che qualcuno ha appena tolto."""
+    utente = await _utente(app_db_session)
+    piva = f"7{uuid.uuid4().int % 10**10:010d}"
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile("decisa.pdf", _pdf(f"ALTRA DITTA - P.IVA {piva} - DDT 2")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+    await scegli_fornitore(
+        documento.id, ScegliFornitore(supplier_id=None), app_db_session, utente
+    )
+    await _fornitore(app_db_session, "Altra Ditta", piva)
+
+    await riesamina_fornitori(app_db_session, utente)
+
+    await app_db_session.refresh(documento)
+    assert documento.supplier_id is None
+    assert documento.supplier_source == "manuale"
+
+
+async def test_il_conteggio_separa_anche_quelli_da_assegnare(app_db_session) -> None:
+    utente = await _utente(app_db_session)
+    piva = f"6{uuid.uuid4().int % 10**10:010d}"
+    fornitore = await _fornitore(app_db_session, "Conteggio Prova", piva)
+    await carica(
+        app_db_session,
+        file=_FintoFile("c1.pdf", _pdf(f"CONTEGGIO PROVA P.IVA {piva} DDT 1")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+    await carica(
+        app_db_session,
+        file=_FintoFile("c2.pdf", _pdf(f"SCONOSCIUTO {uuid.uuid4().hex[:6]} DDT 2")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+
+    conti = await conteggio_fornitori(app_db_session, utente)
+
+    per_id = {c.supplier_id: c for c in conti}
+    assert per_id[fornitore.id].count == 1
+    assert per_id[fornitore.id].supplier_name == fornitore.name
+    assert per_id[None].count >= 1

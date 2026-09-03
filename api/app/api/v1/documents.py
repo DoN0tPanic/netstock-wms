@@ -22,20 +22,21 @@ from sqlalchemy import func, or_, select
 
 from app.deps import CurrentUser, DbSession, require_role
 from app.exceptions import NotFoundError, ValidationAppError
+from app.models.catalog import Supplier
 from app.models.delivery import DeliveryNote
 from app.models.documents import Document
 from app.models.enums import UserRole
 from app.models.users import User
 from app.schemas.common import Page
-from app.schemas.documents import DocumentResponse
-from app.services import documents_archive
+from app.schemas.documents import ContoFornitore, DocumentResponse, ScegliFornitore
+from app.services import documents_archive, fornitori_bolle
 from app.services.audit import write_audit
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 async def _con_numero_bolla(db: DbSession, righe: list[Document]) -> list[Document]:
-    """Il numero della bolla collegata, per non mostrare un UUID in elenco."""
+    """Il numero della bolla e il nome del fornitore, per non mostrare UUID."""
     identificativi = {r.delivery_note_id for r in righe if r.delivery_note_id}
     numeri: dict[uuid.UUID, str] = {}
     if identificativi:
@@ -45,11 +46,30 @@ async def _con_numero_bolla(db: DbSession, righe: list[Document]) -> list[Docume
             )
         )
         numeri = {riga.id: riga.number for riga in risultato}
+    fornitori: dict[uuid.UUID, str] = {}
+    identificativi_fornitore = {r.supplier_id for r in righe if r.supplier_id}
+    if identificativi_fornitore:
+        risultato = await db.execute(
+            select(Supplier.id, Supplier.name).where(
+                Supplier.id.in_(identificativi_fornitore)
+            )
+        )
+        fornitori = {riga.id: riga.name for riga in risultato}
     for riga in righe:
         riga.delivery_note_number = (
             numeri.get(riga.delivery_note_id) if riga.delivery_note_id else None
         )
+        riga.supplier_name = fornitori.get(riga.supplier_id) if riga.supplier_id else None
     return righe
+
+
+async def _anagrafica(db: DbSession) -> list[fornitori_bolle.Fornitore]:
+    righe = await db.execute(
+        select(Supplier.id, Supplier.name, Supplier.vat_number).where(
+            Supplier.is_active.is_(True)
+        )
+    )
+    return [fornitori_bolle.Fornitore(id=r.id, name=r.name, vat_number=r.vat_number) for r in righe]
 
 
 @router.get("", response_model=Page[DocumentResponse])
@@ -57,6 +77,8 @@ async def elenco(
     db: DbSession,
     user: CurrentUser,
     q: str | None = None,
+    supplier_id: uuid.UUID | None = None,
+    senza_fornitore: bool = False,
     page: int = 1,
     page_size: int = 25,
 ) -> Any:
@@ -71,6 +93,10 @@ async def elenco(
     """
     page_size = min(page_size, 100)
     filtri = []
+    if supplier_id is not None:
+        filtri.append(Document.supplier_id == supplier_id)
+    elif senza_fornitore:
+        filtri.append(Document.supplier_id.is_(None))
     ordine = [Document.uploaded_at.desc()]
     if q and q.strip():
         cercato = q.strip()
@@ -146,6 +172,9 @@ async def carica(
         delivery_note_id=delivery_note_id,
         uploaded_by=user.id,
     )
+    riconosciuto = fornitori_bolle.riconosci(testo, await _anagrafica(db))
+    if riconosciuto is not None:
+        documento.supplier_id, documento.supplier_source = riconosciuto
     db.add(documento)
     await db.flush()
     await write_audit(
@@ -158,7 +187,12 @@ async def carica(
         # Il nome del file e quanto pesa, non cosa c'era scritto: il registro
         # di sicurezza non è il posto dove far finire il contenuto di una
         # bolla (§7.5).
-        details={"file": documento.filename, "byte": documento.byte_size, "lettura": metodo},
+        details={
+            "file": documento.filename,
+            "byte": documento.byte_size,
+            "lettura": metodo,
+            "fornitore": documento.supplier_source,
+        },
     )
     return (await _con_numero_bolla(db, [documento]))[0]
 
@@ -176,6 +210,105 @@ def _disposizione(filename: str, *, allegato: bool) -> str:
     ripiego = re.sub(r"[^A-Za-z0-9._ -]", "_", filename).strip() or "documento.pdf"
     tipo = "attachment" if allegato else "inline"
     return f"{tipo}; filename=\"{ripiego}\"; filename*=UTF-8\'\'{quote(filename)}"
+
+
+@router.get("/fornitori", response_model=list[ContoFornitore])
+async def conteggio_fornitori(db: DbSession, user: CurrentUser) -> Any:
+    """Quanti documenti per fornitore, più quelli ancora da assegnare.
+
+    Sta in un endpoint suo e non nell'elenco perché i conteggi non cambiano
+    con la pagina né con la ricerca: sono l'indice dell'archivio, e devono
+    restare fermi mentre si sfoglia.
+    """
+    righe = await db.execute(
+        select(
+            Document.supplier_id,
+            Supplier.name,
+            func.count().label("quanti"),
+        )
+        .join(Supplier, Supplier.id == Document.supplier_id, isouter=True)
+        .group_by(Document.supplier_id, Supplier.name)
+        .order_by(func.count().desc())
+    )
+    return [
+        ContoFornitore(
+            supplier_id=riga.supplier_id, supplier_name=riga.name, count=int(riga.quanti)
+        )
+        for riga in righe
+    ]
+
+
+@router.put("/{documento_id}/fornitore", response_model=DocumentResponse)
+async def scegli_fornitore(
+    documento_id: uuid.UUID,
+    corpo: ScegliFornitore,
+    db: DbSession,
+    user: User = Depends(require_role(UserRole.operator)),
+) -> Any:
+    """Assegna il fornitore a mano, o dichiara che non si sa.
+
+    Anche togliere il fornitore è una decisione, e resta scritta come
+    `manuale`: senza, il riesame automatico rimetterebbe il fornitore che una
+    persona aveva appena tolto.
+    """
+    documento = await db.get(Document, documento_id)
+    if documento is None:
+        raise NotFoundError("Documento non trovato.", details={"id": str(documento_id)})
+    if corpo.supplier_id is not None:
+        fornitore = await db.get(Supplier, corpo.supplier_id)
+        if fornitore is None:
+            raise ValidationAppError(
+                "Fornitore inesistente.", details={"supplier_id": str(corpo.supplier_id)}
+            )
+    documento.supplier_id = corpo.supplier_id
+    documento.supplier_source = "manuale"
+    await db.flush()
+    await write_audit(
+        db,
+        actor=user,
+        actor_username=user.username,
+        action="document.supplier",
+        entity_type="document",
+        entity_id=str(documento.id),
+        details={"supplier_id": str(corpo.supplier_id) if corpo.supplier_id else None},
+    )
+    return (await _con_numero_bolla(db, [documento]))[0]
+
+
+@router.post("/fornitori/riesamina")
+async def riesamina_fornitori(
+    db: DbSession,
+    user: User = Depends(require_role(UserRole.operator)),
+) -> Any:
+    """Ripassa i documenti mai riconosciuti, con l'anagrafica di adesso.
+
+    Serve dopo aver aggiunto un fornitore: le bolle già in archivio non si
+    riconoscono da sole, e ricaricarle non è una risposta. Non tocca i
+    documenti su cui qualcuno ha già deciso — nemmeno quelli su cui ha deciso
+    che il fornitore non si sa.
+    """
+    anagrafica = await _anagrafica(db)
+    righe = list(
+        (
+            await db.execute(
+                select(Document).where(
+                    Document.supplier_id.is_(None),
+                    Document.supplier_source.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assegnati = 0
+    for documento in righe:
+        riconosciuto = fornitori_bolle.riconosci(documento.extracted_text, anagrafica)
+        if riconosciuto is None:
+            continue
+        documento.supplier_id, documento.supplier_source = riconosciuto
+        assegnati += 1
+    await db.flush()
+    return {"esaminati": len(righe), "assegnati": assegnati}
 
 
 @router.get("/{documento_id}/file")

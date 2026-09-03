@@ -130,7 +130,14 @@ export interface ArchivedDocument {
   extraction_method: 'testo' | 'ocr' | 'nessuno';
   notes: string | null; delivery_note_id: UUID | null;
   delivery_note_number: string | null; uploaded_at: ISODateTime;
+  supplier_id: UUID | null; supplier_name: string | null;
+  // Come si è arrivati a quel fornitore: `piva` è una prova (la partita IVA
+  // del fornitore è scritta nel documento), `intestazione` è probabile (il
+  // nome è nella testata), `manuale` l'ha deciso una persona.
+  supplier_source: 'piva' | 'intestazione' | 'manuale' | null;
 }
+
+export interface ContoFornitore { supplier_id: UUID | null; supplier_name: string | null; count: number }
 
 export interface ModelloInstallato { nome: string; byte: number; parametri: string | null; quantizzazione: string | null; in_memoria: boolean }
 export interface TempoLettura { engine: string; letture: number; secondi_medi: number; secondi_massimo: number; usate: number }
