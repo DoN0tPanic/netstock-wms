@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Boxes, FileText, FolderSearch, History, LayoutDashboard, MapPin, Menu, PanelLeftClose, PanelLeftOpen, ScrollText, Settings, Shield, X } from 'lucide-react';
+import { Boxes, FileText, FolderSearch, History, LayoutDashboard, MapPin, Menu, ScrollText, Settings, Shield, X } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Button, Modal } from './ui';
 import { GlobalSearch } from './GlobalSearch';
@@ -33,10 +33,16 @@ export function Layout() {
       <div className="flex items-center gap-2"><span className="hidden text-sm xl:block">{session?.full_name}</span><Button variant="ghost" onClick={() => setHelp(true)}>?</Button><Button variant="secondary" onClick={() => void logout()}>Esci</Button></div>
     </header>
     <aside id="barra-laterale" className={`fixed inset-y-0 left-0 z-40 w-64 overflow-y-auto overflow-x-hidden bg-blue-900 py-4 text-white transition-[transform,width] ${menu ? '' : '-translate-x-full'} lg:translate-x-0 ${ridotta ? 'px-4 lg:w-16 lg:px-2' : 'px-4 lg:w-64'}`}>
-      <div className={`mb-6 flex items-center ${ridotta ? 'justify-between lg:justify-center' : 'justify-between'}`}>
-        {/* Ridotta resta il marchio corto: uno spazio vuoto in cima farebbe
-            sembrare la barra rotta invece che raccolta. */}
-        <span className="text-xl font-bold">{ridotta ? <span className="hidden lg:inline">NS</span> : null}<span className={ridotta ? 'lg:hidden' : ''}>NetStock</span></span>
+      <div className="mb-6 flex items-center justify-between gap-2">
+        {/* Ridotta il marchio sparisce: in 64 pixel non ci sta accanto a un
+            comando, e il posto in cima lo tiene il pulsante — che è quello
+            che si cerca quando la barra è chiusa. */}
+        <span className={`text-xl font-bold ${ridotta ? 'lg:hidden' : ''}`}>NetStock</span>
+        {/* `aria-label` esplicita: il pulsante è una sola icona, senza nome
+            accessibile un lettore di schermo leggerebbe «pulsante». */}
+        <button type="button" onClick={alterna} aria-expanded={!ridotta} aria-controls="barra-laterale" aria-label={ridotta ? 'Espandi la barra' : 'Riduci la barra'} title={ridotta ? 'Espandi la barra' : 'Riduci la barra'} className={`hidden rounded-lg p-2 text-slate-300 hover:bg-blue-800 hover:text-white lg:block ${ridotta ? 'lg:mx-auto' : ''}`}>
+          <Menu size={20}/>
+        </button>
         <button className="lg:hidden" aria-label="Chiudi menu" onClick={() => setMenu(false)}><X/></button>
       </div>
       <nav className="space-y-1">
@@ -50,11 +56,6 @@ export function Layout() {
           {adminLinks.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} title={label} onClick={() => setMenu(false)} className={voce}><Icon size={19} className="shrink-0"/><span className={ridotta ? 'lg:hidden' : ''}>{label}</span></NavLink>)}
         </>}
       </nav>
-      {/* `aria-label` esplicita perché ridotta il pulsante non ha testo: il nome
-          accessibile verrebbe dalla sola icona, cioè da niente. */}
-      <button type="button" onClick={alterna} aria-expanded={!ridotta} aria-controls="barra-laterale" aria-label={ridotta ? 'Espandi la barra' : 'Riduci la barra'} title={ridotta ? 'Espandi la barra' : 'Riduci la barra'} className={`mt-6 hidden w-full items-center gap-3 rounded-lg py-2 text-sm text-slate-300 hover:bg-blue-800 hover:text-white lg:flex ${ridotta ? 'justify-center px-0' : 'px-3'}`}>
-        {ridotta ? <PanelLeftOpen size={19} className="shrink-0"/> : <><PanelLeftClose size={19} className="shrink-0"/>Riduci</>}
-      </button>
     </aside>
     <main className={`p-4 transition-[margin] lg:p-8 ${scostamento}`}><Outlet/></main>
     <Modal open={help} title="Scorciatoie da tastiera" onClose={() => setHelp(false)}><dl className="grid grid-cols-[auto_1fr] gap-3"><kbd>/</kbd><dd>Metti a fuoco la ricerca globale</dd><kbd>Invio</kbd><dd>Conferma un seriale durante la scansione</dd><kbd>Esc</kbd><dd>Chiude la finestra aperta</dd><kbd>?</kbd><dd>Apre questo riepilogo</dd></dl></Modal>
