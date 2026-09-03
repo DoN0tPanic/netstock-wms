@@ -70,20 +70,64 @@ async def test_picks_the_template_that_actually_resolves_its_required_fields(mon
     assert chosen.id == "ddt"
 
 
-async def test_ties_are_broken_by_priority(monkeypatch) -> None:
+async def test_a_parita_vince_il_template_piu_specifico(monkeypatch) -> None:
+    """`priority` bassa = template più specifico, e deve vincere lui.
+
+    È l'ordine in cui i template si provano (10 = Meraki, 100 = ripiego
+    generico) e la colonna dice «ordine di auto-detection». A parità di campi
+    risolti vinceva invece il numero più alto, cioè il ripiego.
+    """
     monkeypatch.setattr(
-        pipeline, "run_ocr", lambda image_bytes, doc_type: "no matching fields at all"
+        pipeline, "run_ocr", lambda image_bytes, doc_type: "nessun campo combacia"
     )
 
-    low = _delivery_note_template(priority=10)
-    low.id = "low-priority"
-    high = _delivery_note_template(priority=200)
-    high.id = "high-priority"
+    specifico = _delivery_note_template(priority=10)
+    specifico.id = "specifico"
+    ripiego = _delivery_note_template(priority=200)
+    ripiego.id = "ripiego"
 
-    chosen = await pipeline.auto_detect_template([low, high], [b"fake-image"])
+    chosen = await pipeline.auto_detect_template([specifico, ripiego], [b"fake-image"])
 
     assert chosen is not None
-    assert chosen.id == "high-priority"
+    assert chosen.id == "specifico"
+
+
+async def test_il_pattern_largo_non_ruba_letichetta_a_quello_stretto(monkeypatch) -> None:
+    """Il caso vero, con i template dell'installazione.
+
+    Su un'etichetta Cisco di cui l'OCR non ha letto il codice prodotto, il
+    template Cisco risolve un campo required e quello dell'alimentatore —
+    `[A-Z0-9]{6,20}`, che aggancia qualunque codice — ne risolve uno anche
+    lui. A parità vinceva l'alimentatore, e con lui il pattern largo: il
+    seriale sarebbe stato deciso da una regex che non descrive niente.
+    """
+    monkeypatch.setattr(
+        pipeline, "run_ocr", lambda image_bytes, doc_type: "S/N: ZZO0000TEST\nCisco Systems\n"
+    )
+
+    cisco = _device_label_template(priority=15)
+    cisco.id = "cisco"
+    alimentatore = TemplateSpec(
+        id="alimentatore",
+        name="Alimentatore / etichetta",
+        doc_type="device_label",
+        priority=50,
+        fields=[
+            FieldSpec(
+                name="serial_number",
+                target="unit.serial_number",
+                regex=r"^[A-Z0-9]{6,20}$",
+                keywords=["S/N", "SN", "SERIAL"],
+                required=True,
+                keyword_window=30,
+            ),
+        ],
+    )
+
+    chosen = await pipeline.auto_detect_template([cisco, alimentatore], [b"fake-image"])
+
+    assert chosen is not None
+    assert chosen.id == "cisco"
 
 
 async def test_returns_none_for_empty_template_list() -> None:

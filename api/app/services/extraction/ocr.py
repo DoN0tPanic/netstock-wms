@@ -135,6 +135,16 @@ def ocr_languages() -> str:
     return "+".join(present) if present else "eng"
 
 
+def ocr_profile(doc_type: str) -> str:
+    """Come viene trattata l'immagine per questo tipo di documento.
+
+    Due tipi diversi che ricadono nello stesso profilo producono lo stesso
+    testo: chi mette in cache un giro di OCR deve ragionare su questo, non
+    sul `doc_type`, altrimenti paga due volte lo stesso lavoro (§7.2).
+    """
+    return "page" if doc_type in _PAGE_DOC_TYPES else "label"
+
+
 def run_ocr(image_bytes: bytes, doc_type: str) -> str:
     processed = preprocess_for_ocr(image_bytes, doc_type)
     # psm 4 = colonne di larghezza variabile, che è la forma di una tabella di

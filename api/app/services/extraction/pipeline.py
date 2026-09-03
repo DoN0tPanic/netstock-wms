@@ -4,7 +4,7 @@ from app.config import get_settings
 from app.services.extraction.barcode import classify_barcode_payloads, decode_barcodes
 from app.services.extraction.fusion import fuse_candidates
 from app.services.extraction.llm import extract_via_llm
-from app.services.extraction.ocr import run_ocr
+from app.services.extraction.ocr import ocr_profile, run_ocr
 from app.services.extraction.rules import extract_all_fields
 from app.services.extraction.schemas import (
     Confidence,
@@ -138,10 +138,12 @@ async def auto_detect_template(
         # di cominciare a leggerla.
         return templates[0]
 
-    # Barcode payloads don't depend on the template, and OCR text only
-    # depends on (image, doc_type) — several templates commonly share a
-    # doc_type (e.g. three device_label templates), so caching both avoids
-    # re-running tesseract once per template.
+    # I codici a barre non dipendono dal template, e il testo OCR dipende solo
+    # dall'immagine e dal *profilo* di lettura (etichetta o pagina): molti
+    # template condividono il doc_type, e tipi diversi possono comunque
+    # ricadere sullo stesso profilo. Con la cache su entrambi, aggiungere un
+    # template a un profilo che si legge già non costa un altro giro di
+    # tesseract — che è il costo vero, non le regex.
     barcode_cache: dict[int, list] = {}
     ocr_cache: dict[tuple[int, str], str] = {}
 
@@ -163,7 +165,7 @@ async def auto_detect_template(
 
             remaining_specs = [s for s in template.fields if s.name not in resolved]
             if remaining_specs:
-                ocr_key = (image_index, template.doc_type)
+                ocr_key = (image_index, ocr_profile(template.doc_type))
                 if ocr_key not in ocr_cache:
                     try:
                         ocr_cache[ocr_key] = run_ocr(image_bytes, template.doc_type)
@@ -182,9 +184,27 @@ async def auto_detect_template(
         )
         required_any = sum(1 for name in required_names if name in resolved)
         total_solid = sum(1 for conf in resolved.values() if conf in _SOLID_CONFIDENCE)
-        confidence_sum = sum(_CONFIDENCE_WEIGHT[conf] for conf in resolved.values())
+        # Solo i campi risolti *bene*. Contando anche quelli a confidenza bassa
+        # — che sono le corrispondenze trovate senza parola chiave, cioè un
+        # pattern che pesca a caso nel testo — un template guadagnava punti
+        # dalla propria imprecisione: su un'etichetta HPE il template
+        # dell'alimentatore vinceva perché aveva agganciato «HEWLETT» come
+        # codice prodotto, che non è un codice prodotto.
+        confidence_sum = sum(
+            _CONFIDENCE_WEIGHT[conf]
+            for conf in resolved.values()
+            if conf in _SOLID_CONFIDENCE
+        )
 
-        score = (required_solid, required_any, total_solid, confidence_sum, template.priority)
+        # `priority` negata: il numero più basso è il template più specifico —
+        # è l'ordine in cui si provano (10 = Meraki, 100 = ripiego generico) e
+        # dev'essere anche l'ordine in cui si vince a parità di campi risolti.
+        # Confrontata così com'era, a pari punteggio vinceva il numero più
+        # alto, cioè il template meno specifico: su un'etichetta Cisco cui
+        # l'OCR non avesse letto il codice prodotto, il pattern stretto del
+        # seriale perdeva contro un `[A-Z0-9]{6,20}` che aggancia qualunque
+        # cosa. Più template ci sono, più le parità sono frequenti.
+        score = (required_solid, required_any, total_solid, confidence_sum, -template.priority)
         if best_score is None or score > best_score:
             best_score = score
             best = template
