@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Plus, AlertTriangle, Columns3, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, CalendarClock, CheckCircle2, Columns3, PackageSearch, Plus, RotateCcw, ScrollText, ShieldAlert, SlidersHorizontal, Trash2, Truck, Undo2, Wrench } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { catalogApi, categoriesApi, deliveryNotesApi, exportApi, inventoryApi, locationsApi, movementsApi, suppliersApi, unitsApi, vendorsApi } from "../api";
 import {
@@ -21,7 +21,7 @@ import { percorsoUbicazione } from "../lib/locations";
 import { CatalogItemModal } from "../components/forms/CatalogItemModal";
 import { ReceiveForm } from "../components/forms/ReceiveForm";
 import { Badge, Button, Combobox, Input, Modal, Select, Table, useToast } from "../components/ui";
-import { formatDate, formatDateTime, formatQuantity } from "../lib/format";
+import { formatDate, formatDateTime, formatQuantity, formatRelativeTime } from "../lib/format";
 import { useAuth } from "../hooks/useAuth";
 import { can } from "../lib/permissions";
 import { ErrorMessage, Loading, Page } from "./common";
@@ -55,6 +55,52 @@ function TransferModal({ open, locations, destinationId, moving, setDestinationI
   return <Modal open={open} title={`Sposta ${subject}`} onClose={onClose}><div className="space-y-4"><Select label="Ubicazione di destinazione" required value={destinationId} onChange={(event) => setDestinationId(event.target.value)}><option value="">Seleziona…</option>{locations.map((location) => <option key={location.id} value={location.id}>{percorsoUbicazione(locations, location.id)}</option>)}</Select><Button loading={moving} disabled={!destinationId} onClick={onConfirm}>Conferma spostamento</Button></div></Modal>;
 }
 
+/** L'aspetto di un movimento in elenco: che verso ha e con che segno si legge.
+ *
+ * Il colore da solo non basta e non è la parte che lavora: l'icona ha una
+ * forma diversa per ogni verso, e il segno davanti alla quantità dice entra o
+ * esce anche a chi il colore non lo distingue.
+ */
+const versoMovimento: Record<MovementType, { icona: typeof ArrowDownToLine; tono: string; segno: string }> = {
+  receipt: { icona: ArrowDownToLine, tono: "bg-green-100 text-green-700", segno: "+" },
+  return: { icona: Undo2, tono: "bg-green-100 text-green-700", segno: "+" },
+  rma_in: { icona: RotateCcw, tono: "bg-green-100 text-green-700", segno: "+" },
+  issue: { icona: ArrowUpFromLine, tono: "bg-amber-100 text-amber-800", segno: "−" },
+  rma_out: { icona: Wrench, tono: "bg-amber-100 text-amber-800", segno: "−" },
+  scrap: { icona: Trash2, tono: "bg-red-100 text-red-700", segno: "−" },
+  transfer: { icona: ArrowLeftRight, tono: "bg-slate-100 text-slate-700", segno: "" },
+  adjustment: { icona: SlidersHorizontal, tono: "bg-slate-100 text-slate-700", segno: "" },
+};
+
+/** Un riquadro con un titolo e, quando esiste, il posto dove andare a vedere. */
+function Riquadro({ titolo, quanti, verso, children }: { titolo: string; quanti?: number; verso?: { a: string; testo: string }; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold">
+          {titolo}
+          {quanti !== undefined && quanti > 0 && <span className="ml-2 text-sm font-normal text-slate-500">{quanti}</span>}
+        </h2>
+        {verso && (
+          <Link className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline" to={verso.a}>
+            {verso.testo}<ArrowRight size={15} aria-hidden/>
+          </Link>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Il posto dove non c'è niente da mostrare, che dice perché va bene così. */
+function Sereno({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-slate-600">
+      <CheckCircle2 size={18} className="shrink-0 text-green-600" aria-hidden/>{children}
+    </div>
+  );
+}
+
 export function Dashboard() {
   const query = useDashboard();
   const { session } = useAuth();
@@ -64,18 +110,33 @@ export function Dashboard() {
   if (query.isLoading) return <Loading />;
   if (query.isError || !query.data) return <ErrorMessage />;
   const data = query.data;
+  const totaleGiacenza = data.total_by_category.reduce((somma, riga) => somma + Number(riga.quantity), 0);
   return (
-    <Page title="Dashboard" description="Situazione aggiornata del magazzino">
+    <Page
+      title="Dashboard"
+      // Quando: una pagina di numeri senza un'ora è una pagina di numeri di
+      // cui non si sa l'età, e questa si tiene aperta per ore.
+      description={`Situazione del magazzino, aggiornata alle ${new Date(query.dataUpdatedAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`}
+    >
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card label="Sotto scorta" value={String(data.below_reorder.length)} warning={data.below_reorder.length > 0}/>
-        <Card label="Bolle aperte" value={String(data.open_delivery_notes)}/>
-        <Card label="Garanzie in scadenza" value={String(data.expiring_warranties.length)} warning={data.expiring_warranties.length > 0}/>
+        <Card icona={PackageSearch} label="Sotto scorta" value={String(data.below_reorder.length)}
+          warning={data.below_reorder.length > 0}
+          hint={data.below_reorder.length ? undefined : "Tutti gli articoli sopra la soglia"}/>
+        <Card icona={Truck} label="Bolle aperte" value={String(data.open_delivery_notes)}
+          hint={data.open_delivery_notes ? "Ancora da chiudere" : "Nessuna in sospeso"}
+          verso={data.open_delivery_notes ? "/delivery-notes" : undefined}/>
+        <Card icona={CalendarClock} label="Garanzie in scadenza" value={String(data.expiring_warranties.length)}
+          warning={data.expiring_warranties.length > 0}
+          hint={data.expiring_warranties.length ? undefined : "Nessuna nei prossimi 60 giorni"}/>
       </div>
       {session?.role === "admin" && data.reconciliation_errors > 0 && (
         <section className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <div>
-            <h2 className="font-semibold text-amber-900">{data.reconciliation_errors === 1 ? "Una quantità non torna" : `${data.reconciliation_errors} quantità non tornano`}</h2>
-            <p className="text-sm text-amber-900">Per questi articoli il numero di pezzi <em>registrato dai movimenti</em> non coincide con quello <em>effettivamente a scaffale</em>. Di solito è il segno di una correzione fatta a metà.</p>
+          <div className="flex items-start gap-2">
+            <ShieldAlert size={20} className="mt-0.5 shrink-0 text-amber-700" aria-hidden/>
+            <div>
+              <h2 className="font-semibold text-amber-900">{data.reconciliation_errors === 1 ? "Una quantità non torna" : `${data.reconciliation_errors} quantità non tornano`}</h2>
+              <p className="text-sm text-amber-900">Per questi articoli il numero di pezzi <em>registrato dai movimenti</em> non coincide con quello <em>effettivamente a scaffale</em>. Di solito è il segno di una correzione fatta a metà.</p>
+            </div>
           </div>
           <div className="overflow-x-auto rounded-lg border border-amber-200 bg-white">
             <table className="w-full text-left text-sm">
@@ -95,39 +156,104 @@ export function Dashboard() {
           <p className="text-sm text-amber-900"><strong>Cosa fare:</strong> conta fisicamente i pezzi nelle ubicazioni elencate. Se lo scarto nasce da un movimento registrato male, stornalo dai <Link className="underline" to="/movements">Movimenti</Link>: è il modo pulito, perché rimette a posto sia il conteggio sia la storia. L&apos;avviso sparisce da solo appena i due numeri coincidono. Nel frattempo puoi continuare a lavorare: la segnalazione non blocca nulla.</p>
         </section>
       )}
-      {/* Barre orizzontali: i nomi delle categorie sono parole, e su un asse
-          verticale si accavallerebbero o andrebbero ruotate. Una serie sola,
-          quindi nessuna legenda — il titolo la nomina — e il valore scritto in
-          fondo a ogni barra al posto dell'asse, che sarebbe la stessa
-          informazione due volte. L'altezza cresce con le categorie invece di
-          essere fissa: a tre resterebbe mezzo riquadro vuoto, a dodici
-          starebbero strette. */}
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Giacenza per categoria</h2>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          {data.total_by_category.length ? (
-            <ResponsiveContainer width="100%" height={Math.max(120, data.total_by_category.length * 42 + 16)}>
-              <BarChart data={data.total_by_category} layout="vertical" margin={{ top: 4, right: 60, bottom: 4, left: 4 }}>
-                <CartesianGrid horizontal={false} stroke="#e8e8e6"/>
-                <XAxis type="number" hide/>
-                <YAxis type="category" dataKey="category_name" width={140} tickLine={false} axisLine={false} tick={{ fill: "#52514e", fontSize: 13 }}/>
-                <Tooltip cursor={{ fill: "rgba(15,23,42,0.04)" }} formatter={(value) => [formatQuantity(Number(value), "pz"), "In giacenza"] as [string, string]}/>
-                <Bar dataKey="quantity" fill="#2a6fb8" radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
-                  <LabelList dataKey="quantity" position="right" fill="#0b0b0b" fontSize={13} formatter={(value: ReactNode) => formatQuantity(Number(value), "pz")}/>
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="py-6 text-center text-slate-500">Nessuna giacenza da mostrare: il grafico comparirà dopo il primo carico.</p>
-          )}
+
+      {/* Due colonne da `xl` in su: a sinistra la fotografia del magazzino, a
+          destra quello che è appena successo. Su uno schermo largo la pagina
+          era una colonna sola con tabelle da cinque colonne stirate su
+          millecinquecento pixel, e si scorreva per vedere cose che ci
+          stavano. */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-6 xl:col-span-2">
+          {/* Barre orizzontali: i nomi delle categorie sono parole, e su un
+              asse verticale si accavallerebbero o andrebbero ruotate. Una
+              serie sola, quindi nessuna legenda — il titolo la nomina — e il
+              valore scritto in fondo a ogni barra al posto dell'asse, che
+              sarebbe la stessa informazione due volte. L'altezza cresce con le
+              categorie invece di essere fissa: a tre resterebbe mezzo riquadro
+              vuoto, a dodici starebbero strette. */}
+          <Riquadro titolo="Giacenza per categoria">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              {data.total_by_category.length ? (
+                <>
+                  <p className="mb-3 text-sm text-slate-600">{formatQuantity(totaleGiacenza, "pezzi")} in totale</p>
+                  <ResponsiveContainer width="100%" height={Math.max(120, data.total_by_category.length * 42 + 16)}>
+                    <BarChart data={data.total_by_category} layout="vertical" margin={{ top: 4, right: 60, bottom: 4, left: 4 }}>
+                      <CartesianGrid horizontal={false} stroke="#e8e8e6"/>
+                      <XAxis type="number" hide/>
+                      <YAxis type="category" dataKey="category_name" width={140} tickLine={false} axisLine={false} tick={{ fill: "#52514e", fontSize: 13 }}/>
+                      <Tooltip cursor={{ fill: "rgba(15,23,42,0.04)" }} formatter={(value) => [formatQuantity(Number(value), "pz"), "In giacenza"] as [string, string]}/>
+                      <Bar dataKey="quantity" fill="#2a6fb8" radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
+                        <LabelList dataKey="quantity" position="right" fill="#0b0b0b" fontSize={13} formatter={(value: ReactNode) => formatQuantity(Number(value), "pz")}/>
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </>
+              ) : (
+                <p className="py-6 text-center text-slate-500">Nessuna giacenza da mostrare: il grafico comparirà dopo il primo carico.</p>
+              )}
+            </div>
+          </Riquadro>
+
+          <Riquadro titolo="Articoli sotto soglia" quanti={data.below_reorder.length} verso={{ a: "/stock", testo: "Magazzino" }}>
+            {data.below_reorder.length
+              ? <StockTable rows={data.below_reorder} />
+              : <Sereno>Nessun articolo sotto la soglia di riordino.</Sereno>}
+          </Riquadro>
         </div>
-      </section>
-      <h2 className="text-lg font-semibold">Articoli sotto soglia</h2>
-      <StockTable rows={data.below_reorder} />
-      <h2 className="text-lg font-semibold">Ultimi movimenti</h2>
-      <Table rows={data.recent_movements} keyOf={(row) => row.id} empty="Nessun movimento registrato." columns={[{ key: "date", label: "Data", render: (row) => formatDateTime(row.occurred_at) }, { key: "type", label: "Tipo", render: (row) => movementTypeLabels[row.type] ?? row.type }, { key: "what", label: "Pezzo", render: (row) => row.part_number ?? "—" }, { key: "quantity", label: "Quantità", render: (row) => formatQuantity(row.quantity) }, { key: "reference", label: "Riferimento", render: (row) => row.reference ?? "—" }]}/>
-      <h2 className="text-lg font-semibold">Garanzie in scadenza</h2>
-      <Table rows={data.expiring_warranties} keyOf={(row) => row.id} empty="Nessuna garanzia in scadenza nei prossimi 60 giorni." columns={[{ key: "serial", label: "Seriale", render: (row) => <Link className="text-blue-700 underline" to={`/units/${row.id}`}>{row.serial_number}</Link> }, { key: "warranty", label: "Scadenza garanzia", render: (row) => formatDate(row.warranty_end) }]}/>
+
+        <div className="space-y-6">
+          {/* Otto, non venti: in una colonna stretta venti movimenti fanno una
+              striscia tre volte più alta di tutto il resto della pagina, e
+              nessuno legge il ventesimo da qui. Chi li vuole tutti ha il link
+              accanto al titolo. */}
+          <Riquadro titolo="Ultimi movimenti" verso={{ a: "/movements", testo: "Tutti" }}>
+            {data.recent_movements.length ? (
+              <ul className="divide-y rounded-xl border bg-white">
+                {data.recent_movements.slice(0, 8).map((movimento) => {
+                  const verso = versoMovimento[movimento.type];
+                  const Icona = verso?.icona ?? ScrollText;
+                  return (
+                    <li key={movimento.id} className="flex items-start gap-3 px-4 py-3">
+                      <span className={`mt-0.5 shrink-0 rounded-lg p-1.5 ${verso?.tono ?? "bg-slate-100 text-slate-700"}`}>
+                        <Icona size={16} aria-hidden/>
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {/* Il codice articolo solo se c'è: un «—» dopo
+                            «Carico» sembra un dato mancante, mentre è un
+                            movimento di merce non serializzata. */}
+                        <p className="truncate text-sm font-medium">
+                          {movementTypeLabels[movimento.type] ?? movimento.type}
+                          {movimento.part_number && <span className="ml-1.5 font-normal text-slate-600">{movimento.part_number}</span>}
+                        </p>
+                        <p className="text-xs text-slate-500" title={formatDateTime(movimento.occurred_at)}>
+                          {formatRelativeTime(movimento.occurred_at)}
+                          {movimento.reference && ` · ${movimento.reference}`}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">
+                        {verso?.segno}{formatQuantity(movimento.quantity)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : <Sereno>Nessun movimento registrato.</Sereno>}
+          </Riquadro>
+
+          <Riquadro titolo="Garanzie in scadenza" quanti={data.expiring_warranties.length}>
+            {data.expiring_warranties.length ? (
+              <ul className="divide-y rounded-xl border bg-white">
+                {data.expiring_warranties.map((unita) => (
+                  <li key={unita.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <Link className="truncate font-mono text-sm text-blue-700 hover:underline" to={`/units/${unita.id}`}>{unita.serial_number}</Link>
+                    <span className="shrink-0 text-sm text-slate-600" title={formatDate(unita.warranty_end)}>{formatRelativeTime(unita.warranty_end)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <Sereno>Nessuna garanzia in scadenza nei prossimi 60 giorni.</Sereno>}
+          </Riquadro>
+        </div>
+      </div>
     </Page>
   );
 }
@@ -142,16 +268,23 @@ function Card({
   value,
   warning,
   hint,
+  icona: Icona,
+  verso,
 }: {
   label: string;
   value: string;
   warning?: boolean;
   hint?: string;
+  icona?: typeof PackageSearch;
+  verso?: string;
 }) {
-  return (
-    <div className={`rounded-xl border p-5 ${warning ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
-      <p className="text-sm text-slate-600">{label}</p>
-      <p className="mt-1 text-3xl font-semibold text-slate-900">{value}</p>
+  const corpo = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm text-slate-600">{label}</p>
+        {Icona && <Icona size={18} className={warning ? "text-amber-700" : "text-slate-400"} aria-hidden/>}
+      </div>
+      <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{value}</p>
       {warning ? (
         <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-amber-800">
           <AlertTriangle size={15} aria-hidden/>Da controllare
@@ -159,8 +292,15 @@ function Card({
       ) : (
         hint && <p className="mt-2 text-sm text-slate-500">{hint}</p>
       )}
-    </div>
+    </>
   );
+  const aspetto = `block rounded-xl border p-5 ${warning ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`;
+  // Un numero che nomina un problema dovrebbe portare al problema — ma solo
+  // dove esiste davvero un posto dove andare: un riquadro che si può premere e
+  // non porta da nessuna parte è peggio di uno che non si preme.
+  return verso
+    ? <Link to={verso} className={`${aspetto} transition hover:border-slate-300 hover:shadow-sm`}>{corpo}</Link>
+    : <div className={aspetto}>{corpo}</div>;
 }
 function StockTable({
   rows,
