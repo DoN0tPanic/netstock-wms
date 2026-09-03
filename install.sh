@@ -377,6 +377,7 @@ echo "    make ps        stato dei servizi"
 echo "    make logs      log in tempo reale"
 echo "    make down      arresto"
 echo "    make backup    copia di sicurezza del database"
+echo "    ./uninstall.sh --controlla   cosa verrebbe rimosso, se un giorno serve"
 echo "    make backup-verify  riapre l'ultimo backup per controllare che torni"
 echo
 echo "  Se hai appena aggiunto il tuo utente al gruppo docker, riapri il"

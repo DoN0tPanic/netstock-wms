@@ -1,4 +1,4 @@
-.PHONY: install update test-db backup-timer backup-verify import-catalogo import-giacenza ai-report certs-ca up up-ai ollama-pull licenses check-sensitive gitleaks gitleaks-baseline down logs ps build migrate seed reconcile backup restore reset-data certs bootstrap fmt lint test
+.PHONY: install update uninstall test-db backup-timer backup-verify import-catalogo import-giacenza ai-report certs-ca up up-ai ollama-pull licenses check-sensitive gitleaks gitleaks-baseline down logs ps build migrate seed reconcile backup restore reset-data certs bootstrap fmt lint test
 
 # Installazione da zero: dipendenze di sistema, permessi, primo avvio.
 install:
@@ -8,6 +8,12 @@ install:
 # ricostruzione, riavvio, verifica. Non tocca .env né i dati.
 update:
 	./update.sh
+
+# Rimuove NetStock da questa macchina. Senza argomenti i dati restano nel
+# volume; `./uninstall.sh --dati` cancella anche quelli, dopo aver fatto una
+# copia e aver chiesto di scriverlo per esteso.
+uninstall:
+	./uninstall.sh
 
 up:
 	docker compose up -d --build

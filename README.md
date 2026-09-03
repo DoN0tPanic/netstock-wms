@@ -95,6 +95,21 @@ Il compromesso, detto chiaramente: la chiave della CA resta su questa macchina, 
 
 Se la macchina cambia indirizzo, `./scripts/gen-selfsigned-cert.sh` dice per quali nomi vale il certificato attuale e quali servirebbero adesso.
 
+## Disinstallazione
+
+```bash
+./uninstall.sh --controlla   # dice cosa toglierebbe, senza toccare niente
+./uninstall.sh               # ferma e rimuove container e immagini: i dati restano
+./uninstall.sh --dati        # rimuove anche il database
+./uninstall.sh --tutto       # database, copie, .env, certificati, timer
+```
+
+**Senza argomenti i dati non si toccano.** L'applicazione sparisce, il magazzino resta nel volume, e un `./install.sh` lo ritrova com'era. Cancellare il database è un'altra cosa: si chiede per nome con `--dati`, e prima bisogna scrivere per esteso `CANCELLA I DATI`.
+
+Prima di cancellare, lo script **fa una copia e la verifica**, e la mette in `~/netstock-archivio` — fuori dal repository e fuori da `/var/backups`, cioè fuori da tutto quello che i passi successivi possono rimuovere. Se la copia non riesce o non si rilegge, si ferma.
+
+Non cancella la cartella del progetto (ci sta girando dentro) e non tocca le immagini di `postgres` e `ollama`, che possono servire ad altro sulla stessa macchina.
+
 ## Backup
 
 L'installatore propone un timer systemd che alle 02:30 copia il database; su un'installazione già esistente si attiva con `make backup-timer`. Conservazione: 30 copie giornaliere e 12 mensili in `/var/backups/netstock`.
@@ -148,6 +163,7 @@ Al primo accesso l'utente `admin` deve cambiare la password (`must_change_passwo
 netstock/
 ├── install.sh      Installatore: dipendenze, permessi, primo avvio
 ├── update.sh       Aggiornamento: backup, codice nuovo, ricostruzione, verifica
+├── uninstall.sh    Rimozione: senza argomenti i dati restano
 ├── api/            Backend FastAPI (Python 3.12, async SQLAlchemy, Alembic)
 ├── web/            Frontend React 18 + TypeScript + Vite + Tailwind
 ├── docs/09-adr/    Architecture Decision Records
