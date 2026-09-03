@@ -4,6 +4,7 @@ import httpx
 import structlog
 
 from app.config import get_settings
+from app.services import ai_config
 from app.services.extraction.prompts import SYSTEM_PROMPT
 from app.services.extraction.schemas import FieldSpec
 
@@ -32,7 +33,7 @@ async def extract_via_llm(
             response = await client.post(
                 "/api/generate",
                 json={
-                    "model": settings.extract_model,
+                    "model": await ai_config.modello(),
                     "system": SYSTEM_PROMPT,
                     "prompt": user_prompt,
                     "format": "json",

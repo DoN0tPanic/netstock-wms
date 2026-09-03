@@ -131,3 +131,11 @@ export interface ArchivedDocument {
   notes: string | null; delivery_note_id: UUID | null;
   delivery_note_number: string | null; uploaded_at: ISODateTime;
 }
+
+export interface ModelloInstallato { nome: string; byte: number; parametri: string | null; quantizzazione: string | null; in_memoria: boolean }
+export interface TempoLettura { engine: string; letture: number; secondi_medi: number; secondi_massimo: number; usate: number }
+export interface StatoAi {
+  attiva: boolean; modello_in_uso: string; modalita: string;
+  ollama_raggiungibile: boolean; indirizzo_ollama: string;
+  modelli: ModelloInstallato[]; tempi: TempoLettura[];
+}

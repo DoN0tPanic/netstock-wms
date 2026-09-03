@@ -1,5 +1,5 @@
 import { ApiError, apiDownload, apiRequest } from './client';
-import type { AdjustRequest, AppSetting, ArchivedDocument, BackupStatus, RestoreResult, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite } from '../types/api';
+import type { AdjustRequest, AppSetting, ArchivedDocument, BackupStatus, RestoreResult, StatoAi, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite } from '../types/api';
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 const crud = <T, W>(resource: string) => ({
@@ -69,5 +69,9 @@ export const maintenanceApi = {
     return risposta.blob();
   },
   restore: (file: File, conferma: string) => { const body = new FormData(); body.append('file', file); body.append('conferma', conferma); return apiRequest<RestoreResult>('/maintenance/restore', { method: 'POST', body }); },
+};
+export const aiApi = {
+  status: () => apiRequest<StatoAi>('/ai/stato'),
+  setModel: (modello: string, modalita?: string) => apiRequest<StatoAi>('/ai/modello', { method: 'PUT', body: { modello, modalita } }),
 };
 export const systemApi = { health: () => apiRequest<HealthStatus>('/health'), ready: () => apiRequest<HealthStatus>('/health/ready'), dashboard: () => apiRequest<DashboardSummary>('/dashboard') };

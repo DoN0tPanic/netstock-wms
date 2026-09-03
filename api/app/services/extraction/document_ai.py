@@ -38,6 +38,7 @@ import httpx
 import structlog
 
 from app.config import get_settings
+from app.services import ai_config
 from app.services.extraction.document_lines import CatalogItemRef
 
 logger = structlog.get_logger("netstock.extraction.document_ai")
@@ -265,7 +266,7 @@ def _condense_for_model(ocr_text: str) -> str:
 
 async def _call_model(ocr_text: str) -> dict:
     body = {
-        "model": settings.extract_model,
+        "model": await ai_config.modello(),
         "system": SYSTEM_PROMPT,
         "prompt": f"Testo OCR del documento:\n---\n{_condense_for_model(ocr_text)}\n---",
         "format": RESPONSE_SCHEMA,
@@ -302,7 +303,7 @@ async def propose_document_lines(
     l'operatore resta con il risultato deterministico, che è già sullo schermo.
     """
     started = time.monotonic()
-    proposal = DocumentProposal(model=settings.extract_model)
+    proposal = DocumentProposal(model=await ai_config.modello())
 
     if not settings.extract_enabled or not ocr_text.strip():
         return proposal

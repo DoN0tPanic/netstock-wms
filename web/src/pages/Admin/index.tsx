@@ -8,6 +8,7 @@ import { EXTRACTION_FILE_ACCEPT, prepareExtractionImage } from "../../components
 import { formatDateTime } from "../../lib/format";
 import { ErrorMessage, Loading, Page } from "../common";
 import { BackupAdmin } from "./Backup";
+import { ModelliAdmin } from "./Modelli";
 const roleLabels: Record<UserRole, string> = { viewer: "Sola lettura", operator: "Operatore", admin: "Amministratore" };
 const emptyUser = { username: "", full_name: "", email: "", role: "operator" as UserRole, password: "" };
 // Nomi di tabella come li vede chi amministra, non come li vede il database:
@@ -333,6 +334,7 @@ export function SettingsAdmin() {
       {/* Copia e ripristino stanno qui e non in una voce di menù a parte: si
           cercano dove si cercano le cose di sistema, e la sidebar è già stata
           ridotta apposta a quattro voci operative. */}
+      <ModelliAdmin/>
       <BackupAdmin/>
       <Modal open={editing !== null} title={`Modifica ${editing?.key ?? ""}`} onClose={() => !busy && setEditing(null)}>
         <div className="space-y-3">

@@ -71,6 +71,20 @@ Fornitori, categorie e ubicazioni **devono esistere già**: crearli al volo da u
 
 La giacenza importata **non è un inserimento nel database**: ogni pezzo passa dalla stessa funzione che registra la merce senza bolla, quindi ha la sua riga nel registro con data (`DATA=`, la data reale dell'inventario), autore e riferimento `GIACENZA-INIZIALE` — che è quello che permette di riconoscerla fra due anni.
 
+## Il modello che legge i documenti
+
+In **Impostazioni** si sceglie quale modello legge bolle ed etichette, fra quelli installati, e la scelta vale dalla lettura successiva senza riavviare niente. Accanto ci sono i numeri che rispondono davvero alla domanda «conviene cambiare»: quanti secondi costa una lettura *su questa macchina*, presi dalle letture vere.
+
+Si sceglie da un elenco e non si scrive a mano perché un nome vale solo se Ollama l'ha scaricato — sono gigabyte — e un campo libero permetterebbe di salvare qualcosa di plausibile e scoprire alla prima bolla che non c'è.
+
+Per aggiungerne uno nuovo:
+
+```bash
+make ollama-pull MODEL=qwen3:8b
+```
+
+Non c'è un pulsante nella pagina, ed è una scelta: il servizio che legge i documenti **non ha una via d'uscita verso internet** (§7.5), ed è la misura che garantisce che il testo di una bolla non possa lasciare la macchina. Lo scaricamento lo fa un container temporaneo che monta lo stesso volume e poi sparisce.
+
 ## Archivio delle bolle
 
 I PDF delle bolle scansionate si caricano in **Archivio bolle** e si ritrovano cercando quello che c'è scritto **dentro**: il file può chiamarsi `scan_001.pdf`, se contiene «n ordine DEMO-4471» lo trovi cercando `4471`. Funziona anche su un frammento.

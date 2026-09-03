@@ -18,6 +18,7 @@ from app.db import AsyncSessionLocal
 from app.exceptions import AppError
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIDMiddleware
+from app.services import ai_config
 from app.services.audit import write_audit
 from app.services.reservations import expire_reservations
 
@@ -112,6 +113,10 @@ async def _warm_up_extraction_model() -> None:
     """
     if not settings.extract_enabled:
         return
+    # Il modello da scaldare è quello scelto adesso, non quello scritto nel
+    # file di configurazione: si può cambiare dalle Impostazioni, e riscaldare
+    # quello sbagliato lascerebbe fredda la prima lettura vera.
+    modello_scelto = await ai_config.modello()
     try:
         async with httpx.AsyncClient(
             base_url=settings.ollama_base_url, timeout=httpx.Timeout(600.0, connect=5.0)
@@ -119,7 +124,7 @@ async def _warm_up_extraction_model() -> None:
             response = await client.post(
                 "/api/generate",
                 json={
-                    "model": settings.extract_model,
+                    "model": modello_scelto,
                     "prompt": "ok",
                     "stream": False,
                     "think": False,
@@ -128,7 +133,7 @@ async def _warm_up_extraction_model() -> None:
             )
             response.raise_for_status()
         structlog.get_logger("netstock.extraction").info(
-            "extraction_model_warm", model=settings.extract_model
+            "extraction_model_warm", model=modello_scelto
         )
     except Exception as exc:  # noqa: BLE001
         structlog.get_logger("netstock.extraction").info(
