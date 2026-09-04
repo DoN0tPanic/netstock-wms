@@ -5,8 +5,7 @@ import { documentsApi, suppliersApi } from "../api";
 import type { ArchivedDocument, Supplier } from "../types/api";
 import { useAuth } from "../hooks/useAuth";
 import { can } from "../lib/permissions";
-import { Badge, Button, Input, Modal, Select, Table, useToast } from "../components/ui";
-import { formatDateTime } from "../lib/format";
+import { Badge, Button, Input, Modal, Select, useToast } from "../components/ui";
 import { ErrorMessage, Loading, Page } from "./common";
 
 const peso = (byte: number): string => {
