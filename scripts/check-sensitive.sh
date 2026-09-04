@@ -219,7 +219,48 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
       fi
     done < "$ELENCO"
   fi
-  [ "$STORIA" -eq 0 ] && echo "  storia pulita ($(git rev-list --count --all) commit)"
+
+  # --- I messaggi dei commit ----------------------------------------------
+  # Un messaggio non è un file, e `git grep` non lo vede: per tre revisioni di
+  # fila questa è stata la sola zona scoperta del controllo, e ogni volta ci
+  # era rimasto dentro qualcosa che era già stato tolto dal codice — un numero
+  # d'ordine, il modello di una scheda video, il nome di un documento interno.
+  # Un messaggio si legge come un file, si pubblica come un file, e va guardato
+  # come un file.
+  MESSAGGI=$(git log --all --format='%H%n%B%n---fine-messaggio---')
+  messaggi() {
+    local etichetta="$1" pattern="$2" righe
+    righe=$(echo "$MESSAGGI" | grep -inE "$pattern" || true)
+    [ -f "$AMMESSI" ] && righe=$(echo "$righe" | grep -vFf <(grep -vE '^\s*(#|$)' "$AMMESSI") || true)
+    if [ -n "$righe" ]; then
+      trovato=1; STORIA=1
+      echo "TROVATO nel messaggio di un commit — $etichetta:"
+      echo "$righe" | head -3 | cut -c1-100 | sed 's/^/   /'
+      echo "      I messaggi si riscrivono solo ricostruendo la storia: non basta"
+      echo "      un commit nuovo che corregge quello vecchio."
+    fi
+  }
+  for i in "${!MODELLI[@]}"; do
+    messaggi "${ETICHETTE[$i]}" "${MODELLI[$i]}"
+  done
+  SERIALI_MSG=$(echo "$MESSAGGI" | grep -ohE "$SERIALI" 2>/dev/null | sort -u | dichiarati)
+  if [ -n "$SERIALI_MSG" ]; then
+    trovato=1; STORIA=1
+    echo "TROVATO nel messaggio di un commit — seriali non dichiarati:"
+    echo "$SERIALI_MSG" | head -5 | sed 's/^/   /'
+  fi
+  if [ -f "$ELENCO" ]; then
+    n=0
+    while IFS= read -r riga; do
+      [[ -z "${riga// }" || "$riga" == \#* ]] && continue
+      n=$((n + 1))
+      if echo "$MESSAGGI" | grep -q -iE "$riga"; then
+        trovato=1; STORIA=1
+        echo "TROVATO nel messaggio di un commit (modello locale, riga $n): $riga"
+      fi
+    done < "$ELENCO"
+  fi
+  [ "$STORIA" -eq 0 ] && echo "  storia pulita: $(git rev-list --count --all) commit, contenuti e messaggi"
   echo
 fi
 
