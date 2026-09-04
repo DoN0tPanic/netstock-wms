@@ -212,6 +212,21 @@ Prima di cancellare, lo script **fa una copia e la verifica**, e la mette in `~/
 
 Non cancella la cartella del progetto (ci sta girando dentro) e non tocca le immagini di `postgres` e `ollama`, che possono servire ad altro sulla stessa macchina.
 
+## Cosa si conserva, e per quanto
+
+| Cosa | Quanto | Perché |
+|---|---|---|
+| **Movimenti** (`stock_movements`) | per sempre | Non è un registro di ciò che è stato fatto: **è la giacenza**. Il numero di pezzi su uno scaffale è la somma dei movimenti, e un movimento cancellato è un pezzo che sparisce o compare dal nulla |
+| **Registro di controllo** (`audit_log`) | 12 mesi | Chi ha fatto cosa. Serve a rispondere a una domanda su un fatto recente; passato l'anno occupa e basta. Si regola con `AUDIT_RETENTION_DAYS` |
+| Letture dei documenti (`extraction_runs`) | 90 giorni | `EXTRACTION_LOG_RETENTION_DAYS` |
+| Sessioni scadute | 30 giorni | |
+
+La cancellazione del registro di controllo è **l'unica eccezione all'append-only**, ed è scritta nel database, non nel codice che lo usa: il trigger accetta una cancellazione solo se la sessione dichiara che è in corso una pulizia **e** solo per righe già scadute. Ogni altra cancellazione, e qualunque modifica, restano rifiutate — anche al proprietario della tabella. Il ruolo con cui gira l'applicazione, per parte sua, il permesso di cancellare non ce l'ha proprio.
+
+Il registro dei movimenti non ha nessuna eccezione: usa una funzione diversa, apposta perché una modifica alla conservazione del registro di controllo non possa arrivargli per sbaglio.
+
+La pulizia gira ogni notte alle 03:10 e **si annota nel registro stesso**: quante righe ha tolto e con quale finestra.
+
 ## Backup
 
 ![Copia di sicurezza e dati tecnici](docs/immagini/08-backup.png)

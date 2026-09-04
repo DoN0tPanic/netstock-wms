@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     extract_timeout_seconds: float = 900.0
     extract_allow_heic: bool = False
     extraction_log_retention_days: int = 90
+    # Il registro di controllo si conserva un anno, poi si cancella da solo.
+    # È l'unica tabella append-only con una scadenza: `stock_movements` non ne
+    # ha e non deve averne — quella è la giacenza, non un registro di ciò che
+    # è stato fatto (§0008).
+    audit_retention_days: int = 365
     extraction_rate_limit_per_minute: int = 30
 
     login_rate_limit_per_minute: int = 10
