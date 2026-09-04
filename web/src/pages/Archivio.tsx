@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Download, FileText, Folder, FolderOpen, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
+import { ArrowRight, Download, FileText, Folder, FolderOpen, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 import { documentsApi, suppliersApi } from "../api";
 import type { ArchivedDocument, Supplier } from "../types/api";
 import { useAuth } from "../hooks/useAuth";
@@ -64,7 +65,7 @@ export function Archivio() {
   // `null` = tutti; `"nessuno"` = quelli ancora da assegnare.
   const [fornitore, setFornitore] = useState<string | null>(null);
   const [riesaminando, setRiesaminando] = useState(false);
-  const [nuovoFornitore, setNuovoFornitore] = useState<{ nome: string; piva: string } | null>(null);
+  const [nuovoFornitore, setNuovoFornitore] = useState<{ nome: string; piva: string; perDocumento?: string } | null>(null);
   const [creando, setCreando] = useState(false);
 
   // La ricerca parte quando si smette di scrivere, non a ogni tasto: cercare
@@ -105,15 +106,19 @@ export function Archivio() {
         name: nuovoFornitore.nome.trim(),
         vat_number: nuovoFornitore.piva.trim() || null,
       });
+      const perDocumento = nuovoFornitore.perDocumento;
       setNuovoFornitore(null);
-      // Un fornitore lo si crea guardando una bolla che non si sa dove
-      // mettere: il passo successivo è sempre riconoscerla. Farlo da soli
-      // evita di creare il fornitore e restare davanti alla stessa bolla
-      // ancora da assegnare, chiedendosi cos'altro manchi. Tocca solo i
-      // documenti mai riconosciuti, mai una decisione presa da una persona.
+      // Se il fornitore è stato creato dalla tendina di una bolla precisa,
+      // quella bolla è il motivo per cui esiste: assegnargliela è la
+      // decisione che la persona ha appena preso, non un'ipotesi.
+      if (perDocumento) await documentsApi.scegliFornitore(perDocumento, creato.id);
+      // E le altre mai riconosciute si ripassano con l'anagrafica nuova:
+      // creare il fornitore e restare davanti alle stesse bolle da assegnare
+      // farebbe chiedere cos'altro manchi. Mai una decisione già presa.
       const esito = await documentsApi.riesamina();
-      toast.show(esito.assegnati
-        ? `${creato.name} aggiunto, e ${esito.assegnati} ${esito.assegnati === 1 ? "bolla riconosciuta" : "bolle riconosciute"}.`
+      const riconosciute = esito.assegnati + (perDocumento ? 1 : 0);
+      toast.show(riconosciute
+        ? `${creato.name} aggiunto, e ${riconosciute} ${riconosciute === 1 ? "bolla assegnata" : "bolle assegnate"}.`
         : `${creato.name} aggiunto ai fornitori. Nessuna bolla da assegnare lo nomina: mettilo a mano dove serve.`,
         "success");
       await queryClient.invalidateQueries({ queryKey: ["suppliers"] });
@@ -227,8 +232,11 @@ export function Archivio() {
               className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-dashed border-slate-400 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
               <Plus size={15} aria-hidden/>Nuovo fornitore
             </button>
+            <Link className="ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" to="/suppliers">
+              Anagrafica fornitori<ArrowRight size={15} aria-hidden/>
+            </Link>
             {conti.data.some((riga) => !riga.supplier_id) && (
-              <Button variant="ghost" className="ml-auto" loading={riesaminando} onClick={() => void riesamina()}>
+              <Button variant="ghost" loading={riesaminando} onClick={() => void riesamina()}>
                 <RefreshCw size={16} aria-hidden/>Riconosci di nuovo
               </Button>
             )}
@@ -263,6 +271,7 @@ export function Archivio() {
                   <Scheda key={riga.id} documento={riga} fornitori={anagrafica.data?.items ?? []}
                     puoOperare={can(session?.role, "operate")} puoEliminare={can(session?.role, "manage_users")}
                     onAssegna={(id) => void assegna(riga, id)}
+                    onNuovoFornitore={() => setNuovoFornitore({ nome: "", piva: "", perDocumento: riga.id })}
                     onTesto={() => void mostraTesto(riga)}
                     onElimina={() => setDaEliminare(riga)}/>
                 ))}
@@ -309,6 +318,10 @@ export function Archivio() {
   );
 }
 
+/** Valore della voce che apre la creazione invece di assegnare. Non può
+ * essere una stringa vuota (è «da assegnare») né un identificativo vero. */
+const NUOVO = "__nuovo__";
+
 /** Un documento come scheda: prima la faccia, poi il nome.
  *
  * L'anteprima non è decorazione. Una bolla si riconosce dalla sua forma —
@@ -316,12 +329,13 @@ export function Archivio() {
  * nome, che è quasi sempre `scan_qualcosa.pdf`. L'immagine si carica pigra:
  * venti schede sono venti richieste, e non tutte finiscono a schermo.
  */
-function Scheda({ documento, fornitori, puoOperare, puoEliminare, onAssegna, onTesto, onElimina }: {
+function Scheda({ documento, fornitori, puoOperare, puoEliminare, onAssegna, onNuovoFornitore, onTesto, onElimina }: {
   documento: ArchivedDocument;
   fornitori: Supplier[];
   puoOperare: boolean;
   puoEliminare: boolean;
   onAssegna: (supplierId: string) => void;
+  onNuovoFornitore: () => void;
   onTesto: () => void;
   onElimina: () => void;
 }) {
@@ -351,10 +365,16 @@ function Scheda({ documento, fornitori, puoOperare, puoEliminare, onAssegna, onT
         </p>
         {puoOperare ? (
           <div className="space-y-1">
+            {/* L'ultima voce crea il fornitore: è qui che ci si accorge che
+                manca, davanti a una bolla che non si sa dove mettere, ed è
+                qui che lo si cerca. Mandare altrove vuol dire perdere il
+                filo e tornare senza ricordarsi qual era la bolla. */}
             <Select aria-label={`Fornitore di ${documento.filename}`} className="min-h-9 py-1 text-sm"
-              value={documento.supplier_id ?? ""} onChange={(evento) => onAssegna(evento.target.value)}>
+              value={documento.supplier_id ?? ""}
+              onChange={(evento) => evento.target.value === NUOVO ? onNuovoFornitore() : onAssegna(evento.target.value)}>
               <option value="">— da assegnare —</option>
               {fornitori.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              <option value={NUOVO}>+ Crea un fornitore…</option>
             </Select>
             {come && <Badge tone={come.tono}>{come.testo}</Badge>}
           </div>
