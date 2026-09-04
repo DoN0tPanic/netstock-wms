@@ -2,6 +2,72 @@
 
 Gestionale di magazzino per materiale di rete (Cisco, Meraki, Palo Alto, alimentatori, transceiver, cavi), pensato per un piccolo team IT. Nessuna dipendenza da servizi cloud: gira interamente su una singola VM Ubuntu Server con Docker Compose.
 
+![Dashboard](docs/immagini/01-dashboard.png)
+
+La regola che tiene insieme tutto il resto: **ogni pezzo che entra o esce lascia una riga in un registro che non si può riscrivere**. Chi, quando, da dove a dove, con quale bolla. Non c'è una schermata che permetta di «sistemare» una giacenza: si registra un movimento, e se un movimento è sbagliato si storna — così restano scritti sia l'errore sia la correzione. Il database stesso lo impone, non solo il codice: il ruolo con cui gira l'applicazione non ha il permesso di modificare o cancellare quelle righe.
+
+> Le schermate di questa pagina vengono da un'istanza dimostrativa con dati inventati: seriali `DMO…`, «Magazzino dimostrativo», fornitori di fantasia. Nessuna immagine viene da un magazzino in uso.
+
+## Cosa fa, schermata per schermata
+
+### Ricevere la merce senza lasciare la tastiera
+
+![Ricezione della merce con acquisizione dei seriali](docs/immagini/06-ricezione.png)
+
+È la schermata su cui il resto è costruito. Arriva un bancale con ventiquattro switch: si sceglie la bolla (o la si crea lì), si dice dove va la merce, si sceglie il modello, e poi **si spara un seriale dopo l'altro col lettore di codici a barre**. Il campo resta pronto per il successivo: nessun clic fra un pezzo e l'altro. Il contatore dice `5 / 24` e la riga resta aperta finché i conti non tornano.
+
+Se il documento dichiara ventiquattro pezzi e ne arrivano diciannove, il sistema **non nasconde la differenza**: la scrive, registra quello che è arrivato davvero e lascia la riga aperta per il resto. Un seriale già a magazzino viene rifiutato sul momento, non a fine registrazione.
+
+La bolla si può anche **fotografare**: da una foto, una scansione o un PDF il sistema propone le righe da ricevere. Chi decide cosa, però, è stabilito e non negoziabile — vedi [Estrazione AI](#estrazione-ai-gpu-facoltativa).
+
+### Il magazzino, in una tabella sola
+
+![Magazzino](docs/immagini/02-magazzino.png)
+
+Pezzi serializzati e materiale sfuso nella stessa vista: uno switch con il suo seriale è una riga, i centoventi patch cord in uno scaffale sono una riga con la quantità. Filtri per ubicazione, fornitore, categoria, condizione e stato; ricerca per seriale, MAC, modello o numero di bolla.
+
+Le colonne si scelgono (`Colonne`) e la scelta resta su quel computer. **L'esportazione CSV porta tutto**, anche le colonne nascoste: quello che si nasconde è per guardare meglio, non per esportare di meno. `Esporta tutto (ZIP)` scarica l'intero magazzino in undici file CSV, uno per tabella, con un `LEGGIMI.txt` che spiega cosa c'è dentro.
+
+### La storia di un singolo apparato
+
+![Dettaglio di un pezzo](docs/immagini/11-dettaglio-unita.png)
+
+Ogni pezzo serializzato ha la sua pagina: dove si trova, in che stato è, da quale bolla è arrivato, quando scade la garanzia — e sotto, **la cronologia completa**, dal carico a oggi. È la risposta alla domanda che di solito costa mezz'ora di telefonate: *dov'è finito questo switch?*
+
+### Il registro dei movimenti
+
+![Movimenti](docs/immagini/03-movimenti.png)
+
+Tutto quello che è successo, in ordine, filtrabile per periodo, tipo, articolo, ubicazione o riferimento — ed esportabile. Un movimento sbagliato non si cancella: si **storna**, e restano scritti l'errore, la correzione e il motivo.
+
+### Le ubicazioni
+
+![Ubicazioni](docs/immagini/04-ubicazioni.png)
+
+Magazzini, scaffali, aree di transito e RMA, ad albero. Il nome si scrive per esteso («Scaffale A01») e **il codice lo ricava il sistema**: un codice battuto a mano diventa presto un codice sbagliato, e da lì in poi metà magazzino sta nel posto sbagliato. Ovunque nell'applicazione l'ubicazione compare per esteso, con il suo percorso: *Magazzino dimostrativo › Scaffale A01*.
+
+### L'archivio delle bolle
+
+![Archivio delle bolle](docs/immagini/05-archivio.png)
+
+I PDF delle bolle scansionate, ritrovabili per **quello che c'è scritto dentro**, e separati da soli per fornitore. Come funziona: [Archivio delle bolle](#archivio-delle-bolle).
+
+### Chi può fare cosa, e chi ha fatto cosa
+
+![Utenti](docs/immagini/10-utenti.png)
+
+Tre ruoli — amministratore, operatore, sola consultazione — e un registro di controllo separato dal ledger.
+
+![Audit](docs/immagini/09-audit.png)
+
+L'audit registra chi ha fatto cosa: carichi e scarichi, creazione e modifica di utenti, cambi di configurazione, storni, rottamazioni, documenti caricati. Gli accessi riusciti e le uscite no, di proposito — riempivano il registro senza dire niente che la tabella delle sessioni non dicesse già; i tentativi **falliti** invece restano, perché quelli qualcosa la dicono.
+
+### La barra si riduce
+
+![Barra laterale ridotta](docs/immagini/12-barra-ridotta.png)
+
+Il menu a tre righe in cima riduce la barra alle sole icone, per lasciare la pagina al contenuto. La scelta se la ricorda quel computer.
+
 ## Quickstart
 
 ```bash
@@ -71,6 +137,18 @@ Fornitori, categorie e ubicazioni **devono esistere già**: crearli al volo da u
 
 La giacenza importata **non è un inserimento nel database**: ogni pezzo passa dalla stessa funzione che registra la merce senza bolla, quindi ha la sua riga nel registro con data (`DATA=`, la data reale dell'inventario), autore e riferimento `GIACENZA-INIZIALE` — che è quello che permette di riconoscerla fra due anni.
 
+## I template di lettura
+
+![Template IA](docs/immagini/07-template-ia.png)
+
+Un template dice come si riconosce un dato su un'etichetta o su una bolla: **che forma ha** il valore (il seriale Cisco è tre lettere, quattro cifre, quattro caratteri; quello Meraki è `Qxxx-xxxx-xxxx`), **vicino a quali parole** cercarlo (`S/N`, `SERIAL`, `MODEL`) e in quali codici a barre, e **dove va a finire** una volta trovato.
+
+NetStock esce con i template di Cisco, Meraki, Fortinet, Palo Alto, Dell, HPE Aruba e Juniper, più uno per le etichette degli alimentatori e uno per la bolla italiana — che conosce le parole con cui è scritta davvero: «D.D.T.», «Vs. ordine», «Spett.le», «Documento di trasporto».
+
+Non ce ne sono di più, ed è una scelta. Un template si aggiunge quando il seriale di quel costruttore ha una forma riconoscibile; dove il seriale è «una stringa alfanumerica» il template non riconosce niente, aggancia il primo codice che passa e **ruba l'etichetta a chi l'avrebbe letta bene**. Senza, resta il ripiego generico e l'operatore corregge; con un template largo, il dato sbagliato arriva già scritto nel campo e sembra giusto.
+
+Quando arriva un formato nuovo si duplica il template più vicino e si cambia la forma del seriale: **niente codice, niente rilascio**. La stessa pagina ha un banco di prova — si carica una foto, si modifica il template e si vede cosa legge, senza scrivere niente a magazzino.
+
 ## Il modello che legge i documenti
 
 In **Impostazioni** si sceglie quale modello legge bolle ed etichette, fra quelli installati, e la scelta vale dalla lettura successiva senza riavviare niente. Accanto ci sono i numeri che rispondono davvero alla domanda «conviene cambiare»: quanti secondi costa una lettura *su questa macchina*, presi dalle letture vere.
@@ -90,6 +168,10 @@ Non c'è un pulsante nella pagina, ed è una scelta: il servizio che legge i doc
 I PDF delle bolle scansionate si caricano in **Archivio bolle** e si ritrovano cercando quello che c'è scritto **dentro**: il file può chiamarsi `scan_001.pdf`, se contiene «n ordine DEMO-4471» lo trovi cercando `4471`. Funziona anche su un frammento.
 
 Il testo si prende dal livello di testo del PDF quando c'è (le bolle che arrivano per posta), altrimenti con l'OCR (le fotocopie). Quale dei due sia stato usato è scritto accanto a ogni documento: serve quando una ricerca non trova, perché su una scansione storta l'OCR sbaglia qualche carattere — e «Testo letto» mostra esattamente ciò che il sistema ha letto.
+
+**Le bolle si separano da sole per fornitore.** In cima c'è un pulsante per fornitore col numero di bolle che ha, più «Da assegnare». Il fornitore non viene inventato: viene riconosciuto fra quelli in anagrafica, con due prove in quest'ordine — la **partita IVA** stampata nel documento (undici cifre non capitano per caso) e il **nome nella testata**, cioè sopra la riga che annuncia il documento. Sotto quella riga comincia la bolla, e il nome di un'azienda lì dentro è il costruttore di quello che è stato consegnato, non chi l'ha consegnato: una bolla di dieci switch Cisco è del distributore, non di Cisco. Se combaciano due fornitori diversi non se ne sceglie nessuno.
+
+Come si è arrivati al fornitore è scritto accanto a ogni riga — `partita IVA`, `intestazione`, `assegnato a mano` — perché un riconoscimento senza il suo perché costringe a controllarli tutti o a fidarsi di tutti. Il fornitore si cambia dall'elenco, e «Riconosci di nuovo» ripassa le bolle mai riconosciute con l'anagrafica di adesso: serve quando un fornitore lo si crea *dopo* aver archiviato le sue bolle.
 
 **È una sezione stagna**: non compare nella ricerca globale in cima alla pagina, e ha la sua. La ricerca globale porta dritto a un pezzo in magazzino; qui si cerca dentro documenti che citano qualunque cosa, comprese merci mai registrate.
 
@@ -126,6 +208,10 @@ Non cancella la cartella del progetto (ci sta girando dentro) e non tocca le imm
 
 ## Backup
 
+![Copia di sicurezza e dati tecnici](docs/immagini/08-backup.png)
+
+Da **Impostazioni** si scarica una copia del database sul proprio computer, si vede quanto pesa ogni tabella, quali copie ha lasciato il timer notturno e quanto spazio resta — e si ripristina una copia precedente. Il ripristino è l'unica operazione del sistema che **cancella dei dati**, e lo dice: prima di procedere salva lo stato attuale, e se qualcosa va storto lo rimette.
+
 L'installatore propone un timer systemd che alle 02:30 copia il database; su un'installazione già esistente si attiva con `make backup-timer`. Conservazione: 30 copie giornaliere e 12 mensili in `/var/backups/netstock`.
 
 Due cose che rendono quelle copie una garanzia invece di un proposito:
@@ -151,6 +237,8 @@ Chiamato da `install.sh`, oppure a mano se le dipendenze ci sono già:
 Al termine, l'applicazione è raggiungibile su `https://<IP-o-hostname-della-VM>`. Il browser mostra un avviso di sicurezza finché non si installa un certificato firmato dalla CA aziendale — è atteso con un certificato self-signed.
 
 Al primo accesso l'utente `admin` deve cambiare la password (`must_change_password=true`).
+
+![Accesso](docs/immagini/00-accesso.png)
 
 ## Comandi comuni (`Makefile`)
 

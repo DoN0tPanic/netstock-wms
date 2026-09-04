@@ -38,6 +38,16 @@ samples/
 *.heif
 *.tif
 *.tiff
+
+# L'unica eccezione: le schermate del README. Il contratto di questa cartella
+# è che ci entrano **solo immagini di un'istanza dimostrativa** — database
+# separato, dati inventati — mai una schermata di un magazzino in uso, dove
+# compaiono seriali, ubicazioni e fornitori di chi lo usa. Un'immagine è la sola
+# cosa che check-sensitive.sh non può leggere dentro: qui la garanzia non è
+# un controllo automatico ma il fatto che una schermata vera non ci arrivi
+# mai. Chi aggiunge un file qui dichiara di averlo guardato.
+!docs/immagini/
+!docs/immagini/*.png
 *.pdf
 *.doc
 *.docx

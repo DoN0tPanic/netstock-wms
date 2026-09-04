@@ -132,10 +132,16 @@ seriali_nei_file
 # controllo di questo file.
 # `compliance/licenses.csv` è un inventario generato da `make licenses`, non
 # un'esportazione di dati: l'eccezione vale per quel file, non per i CSV.
+# `docs/immagini/*.png` sono le schermate del README, e valgono per quella
+# cartella soltanto: ci entrano solo immagini di un'istanza dimostrativa con
+# dati inventati (vedi .gitignore). È l'unico punto di questo controllo che si
+# fida di una persona invece che di un modello — un'immagine non si può
+# leggere dentro — quindi è ristretto a un percorso e a un formato.
 FORMATI_VIETATI='\.(pem|key|p12|pfx|jks|ovpn|pcapng?|sql|dump|bak|xlsx?|csv|kubeconfig|tfstate|pdf|png|jpe?g|heic|heif|tiff?|webp|avif|gif|bmp|docx?|odt|ods|eml|msg|zip|7z|rar)$'
+AMMESSI_BINARI='^(compliance/licenses\.csv|docs/immagini/[A-Za-z0-9._-]+\.png)$'
 FILE_VIETATI=$(printf '%s\n' "${FILES[@]}" \
   | grep -iE "$FORMATI_VIETATI" \
-  | grep -v '^compliance/licenses\.csv$' || true)
+  | grep -vE "$AMMESSI_BINARI" || true)
 
 if [ -n "$FILE_VIETATI" ]; then
   trovato=1
@@ -197,7 +203,7 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
   # Un PDF aggiunto e cancellato subito dopo resta nel pacchetto: qui contano i
   # nomi che sono *esistiti*, non quelli che esistono adesso.
   BINARI=$(git log --all --pretty=format: --name-only | sort -u \
-    | grep -iE "$FORMATI_VIETATI" | grep -v '^compliance/licenses\.csv$' || true)
+    | grep -iE "$FORMATI_VIETATI" | grep -vE "$AMMESSI_BINARI" || true)
   if [ -n "$BINARI" ]; then
     trovato=1; STORIA=1
     echo "TROVATO in un commit passato — file di formato non ammesso:"
