@@ -1,9 +1,9 @@
 """Registro in memoria delle analisi in corso.
 
 L'analisi col modello dura da pochi secondi con una GPU a diversi minuti su
-sola CPU (misurato sulla stessa bolla, con lo stesso identico risultato). Una richiesta HTTP bloccante non
-regge il secondo caso, quindi la lettura torna subito col risultato
-deterministico e l'analisi prosegue in sottofondo.
+sola CPU (misurato sulla stessa bolla, con lo stesso identico risultato). Una
+richiesta HTTP bloccante non regge il secondo caso, quindi la lettura torna
+subito col risultato deterministico e l'analisi prosegue in sottofondo.
 
 I risultati stanno **solo in memoria**, di proposito: §7.5 dice che il testo
 OCR non tocca mai un volume persistente e non entra nel database. Un riavvio
