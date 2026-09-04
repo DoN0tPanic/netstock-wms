@@ -12,6 +12,7 @@ che porta dritto al pezzo.
 
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -19,6 +20,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import defer
 
 from app.deps import CurrentUser, DbSession, require_role
 from app.exceptions import NotFoundError, ValidationAppError
@@ -117,6 +119,11 @@ async def elenco(
         (
             await db.execute(
                 select(Document)
+                # Senza questo l'elenco si porta dietro i PDF interi: cinquanta
+                # documenti sono cinquanta file in memoria per mostrare
+                # cinquanta nomi. Il contenuto e l'anteprima si leggono dalle
+                # rotte che li servono, una per volta.
+                .options(defer(Document.content), defer(Document.preview))
                 .where(*filtri)
                 .order_by(*ordine)
                 .offset((page - 1) * page_size)
@@ -172,6 +179,8 @@ async def carica(
         delivery_note_id=delivery_note_id,
         uploaded_by=user.id,
     )
+    documento.preview = documents_archive.anteprima(dati)
+    documento.preview_at = datetime.now(UTC)
     riconosciuto = fornitori_bolle.riconosci(testo, await _anagrafica(db))
     if riconosciuto is not None:
         documento.supplier_id, documento.supplier_source = riconosciuto
@@ -331,6 +340,37 @@ async def file_originale(
         content=documento.content,
         media_type="application/pdf",
         headers={"Content-Disposition": _disposizione(documento.filename, allegato=scarica)},
+    )
+
+
+@router.get("/{documento_id}/anteprima")
+async def anteprima_documento(
+    documento_id: uuid.UUID, db: DbSession, user: CurrentUser
+) -> Any:
+    """L'immagine della prima pagina, per riconoscere una bolla in una griglia.
+
+    I documenti archiviati prima che l'anteprima esistesse non ce l'hanno: la
+    prima volta che qualcuno la chiede si disegna e si conserva, invece di
+    ridisegnarla per sempre a ogni apertura di pagina. Un PDF che non si lascia
+    disegnare viene marcato come tentato e non si ritenta.
+    """
+    documento = await db.get(Document, documento_id)
+    if documento is None:
+        raise NotFoundError("Documento non trovato.", details={"id": str(documento_id)})
+    if documento.preview is None and documento.preview_at is None:
+        documento.preview = documents_archive.anteprima(documento.content)
+        documento.preview_at = datetime.now(UTC)
+        await db.flush()
+    if documento.preview is None:
+        raise NotFoundError(
+            "Nessuna anteprima per questo documento.", details={"id": str(documento_id)}
+        )
+    return Response(
+        content=documento.preview,
+        media_type="image/jpeg",
+        # L'anteprima di un documento non cambia mai: il documento è
+        # immutabile e l'indirizzo contiene il suo identificativo.
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 

@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select
 
 from app.api.v1.documents import (
+    anteprima_documento,
     carica,
     conteggio_fornitori,
     elenco,
@@ -361,3 +362,66 @@ async def test_il_conteggio_separa_anche_quelli_da_assegnare(app_db_session) -> 
     assert per_id[fornitore.id].count == 1
     assert per_id[fornitore.id].supplier_name == fornitore.name
     assert per_id[None].count >= 1
+
+
+async def test_l_anteprima_si_fa_al_caricamento(app_db_session) -> None:
+    """Una griglia di venti documenti non può disegnarne venti a ogni apertura
+    di pagina: si disegna una volta, quando il documento entra."""
+    utente = await _utente(app_db_session)
+
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile("con-anteprima.pdf", _pdf(f"bolla {uuid.uuid4().hex[:6]}")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+
+    assert documento.preview is not None
+    assert documento.preview[:2] == b"\xff\xd8"  # un JPEG comincia così
+    assert len(documento.preview) < 200_000
+
+
+async def test_i_documenti_di_prima_la_ricevono_quando_serve(app_db_session) -> None:
+    """I documenti archiviati prima che l'anteprima esistesse non ce l'hanno:
+    si disegna alla prima richiesta e resta, invece di rifarla per sempre."""
+    utente = await _utente(app_db_session)
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile("vecchia.pdf", _pdf(f"bolla {uuid.uuid4().hex[:6]}")),
+        note=None, delivery_note_id=None, user=utente,
+    )
+    documento.preview = None
+    documento.preview_at = None
+    await app_db_session.flush()
+
+    risposta = await anteprima_documento(documento.id, app_db_session, utente)
+
+    assert risposta.media_type == "image/jpeg"
+    assert documento.preview is not None
+    assert documento.preview_at is not None
+
+
+async def test_un_pdf_che_non_si_disegna_entra_lo_stesso(
+    app_db_session, monkeypatch
+) -> None:
+    """Un'anteprima è un di più: se il PDF non si lascia disegnare il documento
+    entra comunque e resta cercabile per contenuto. E resta segnato come
+    tentato, così non lo si ridisegna a ogni apertura di pagina."""
+    monkeypatch.setattr(documents_archive, "anteprima", lambda dati: None)
+    utente = await _utente(app_db_session)
+    numero = f"7{uuid.uuid4().int % 100000:05d}"
+
+    documento = await carica(
+        app_db_session,
+        file=_FintoFile(
+            "indisegnabile.pdf",
+            _pdf(f"DOCUMENTO DI TRASPORTO numero {numero} del 04/09/2026 - merce varia"),
+        ),
+        note=None, delivery_note_id=None, user=utente,
+    )
+
+    assert documento.preview is None
+    assert documento.preview_at is not None  # tentata, non da ritentare
+    assert numero in documento.extracted_text  # e si trova comunque cercando
+
+    with pytest.raises(NotFoundError):
+        await anteprima_documento(documento.id, app_db_session, utente)

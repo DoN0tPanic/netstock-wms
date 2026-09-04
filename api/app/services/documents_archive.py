@@ -44,6 +44,42 @@ SOGLIA_TESTO_UTILE = 40
 _log = structlog.get_logger("netstock.archivio")
 
 
+# L'anteprima serve a riconoscere una bolla a colpo d'occhio in una griglia,
+# non a leggerla: 480 pixel di larghezza bastano, e un JPEG di quella misura
+# pesa poche decine di kilobyte contro i megabyte del PDF.
+LARGHEZZA_ANTEPRIMA = 480
+QUALITA_ANTEPRIMA = 72
+
+
+def anteprima(dati: bytes) -> bytes | None:
+    """La prima pagina come immagine, o niente se il PDF non si lascia disegnare.
+
+    Non solleva: un documento che non si può disegnare resta un documento
+    archiviato e cercabile, semplicemente senza faccia. Fermare il caricamento
+    per un'anteprima sarebbe il classico dettaglio che impedisce la cosa
+    importante.
+    """
+    try:
+        documento = pdfium.PdfDocument(io.BytesIO(dati))
+        try:
+            if len(documento) == 0:
+                return None
+            pagina = documento[0]
+            larghezza = pagina.get_width() or LARGHEZZA_ANTEPRIMA
+            scala = min(2.0, max(0.4, LARGHEZZA_ANTEPRIMA / larghezza))
+            immagine = pagina.render(scale=scala, grayscale=False).to_pil()
+        finally:
+            documento.close()
+        fuori = io.BytesIO()
+        immagine.convert("RGB").save(
+            fuori, "JPEG", quality=QUALITA_ANTEPRIMA, optimize=True
+        )
+        return fuori.getvalue()
+    except Exception as errore:
+        _log.warning("anteprima_non_riuscita", errore=str(errore)[:200])
+        return None
+
+
 def impronta(dati: bytes) -> str:
     return hashlib.sha256(dati).hexdigest()
 

@@ -39,6 +39,9 @@ export const documentsApi = {
   text: (id: string) => apiRequest<{ id: string; filename: string; extraction_method: string; text: string }>(`/documents/${id}/testo`),
   remove: (id: string) => apiRequest<void>(`/documents/${id}`, { method: 'DELETE' }),
   fornitori: () => apiRequest<ContoFornitore[]>('/documents/fornitori'),
+  // L'anteprima della prima pagina. Non passa da `apiRequest`: è un'immagine
+  // che il browser carica da sé, con la sua cache.
+  anteprimaUrl: (id: string) => `/api/v1/documents/${id}/anteprima`,
   scegliFornitore: (id: string, supplierId: string | null) => apiRequest<ArchivedDocument>(`/documents/${id}/fornitore`, { method: 'PUT', body: { supplier_id: supplierId } }),
   riesamina: () => apiRequest<{ esaminati: number; assegnati: number }>('/documents/fornitori/riesamina', { method: 'POST' }),
   fileUrl: (id: string) => `/api/v1/documents/${id}/file`,

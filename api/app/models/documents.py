@@ -43,6 +43,9 @@ class Document(Base):
     delivery_note_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("delivery_notes.id", ondelete="SET NULL")
     )
+    # L'immagine della prima pagina (§0007): si calcola una volta e resta.
+    preview: Mapped[bytes | None] = mapped_column(LargeBinary)
+    preview_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT")
     )

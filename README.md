@@ -169,9 +169,15 @@ I PDF delle bolle scansionate si caricano in **Archivio bolle** e si ritrovano c
 
 Il testo si prende dal livello di testo del PDF quando c'è (le bolle che arrivano per posta), altrimenti con l'OCR (le fotocopie). Quale dei due sia stato usato è scritto accanto a ogni documento: serve quando una ricerca non trova, perché su una scansione storta l'OCR sbaglia qualche carattere — e «Testo letto» mostra esattamente ciò che il sistema ha letto.
 
+**Si sfoglia come una cartella di file**: ogni bolla è una scheda con
+l'anteprima della prima pagina, perché una bolla si riconosce dalla sua forma —
+l'intestazione, la tabella delle righe — molto prima che dal nome, che è quasi
+sempre `scan_qualcosa.pdf`. Le schede sono raggruppate per fornitore, e il
+gruppo **«Da assegnare» sta in cima**: è il lavoro che resta da fare.
+
 **Le bolle si separano da sole per fornitore.** In cima c'è un pulsante per fornitore col numero di bolle che ha, più «Da assegnare». Il fornitore non viene inventato: viene riconosciuto fra quelli in anagrafica, con due prove in quest'ordine — la **partita IVA** stampata nel documento (undici cifre non capitano per caso) e il **nome nella testata**, cioè sopra la riga che annuncia il documento. Sotto quella riga comincia la bolla, e il nome di un'azienda lì dentro è il costruttore di quello che è stato consegnato, non chi l'ha consegnato: una bolla di dieci switch Cisco è del distributore, non di Cisco. Se combaciano due fornitori diversi non se ne sceglie nessuno.
 
-Come si è arrivati al fornitore è scritto accanto a ogni riga — `partita IVA`, `intestazione`, `assegnato a mano` — perché un riconoscimento senza il suo perché costringe a controllarli tutti o a fidarsi di tutti. Il fornitore si cambia dall'elenco, e «Riconosci di nuovo» ripassa le bolle mai riconosciute con l'anagrafica di adesso: serve quando un fornitore lo si crea *dopo* aver archiviato le sue bolle.
+Come si è arrivati al fornitore è scritto accanto a ogni riga — `partita IVA`, `intestazione`, `assegnato a mano` — perché un riconoscimento senza il suo perché costringe a controllarli tutti o a fidarsi di tutti. Il fornitore si cambia dalla scheda, e **si crea da qui**: è davanti a una bolla che non si sa dove mettere che ci si accorge che manca, e mandare in un'altra sezione vuol dire perdere il filo. Appena creato, le bolle mai riconosciute vengono ripassate con l'anagrafica nuova — se ne nominano una, ci finiscono da sole. Lo stesso lo fa «Riconosci di nuovo» a comando.
 
 **È una sezione stagna**: non compare nella ricerca globale in cima alla pagina, e ha la sua. La ricerca globale porta dritto a un pezzo in magazzino; qui si cerca dentro documenti che citano qualunque cosa, comprese merci mai registrate.
 
