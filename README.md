@@ -301,6 +301,7 @@ Impostare `EXTRACT_ENABLED=false` in `.env`: il gestionale funziona identico, se
 - [`docs/09-adr/`](docs/09-adr/) — Architecture Decision Records: le scelte non ovvie e il perché
 - [`compliance/README.md`](compliance/README.md) — licenze di tutti i componenti, e le due cose che un inventario automatico non vede
 
-## Stato del progetto
+## Il perché delle scelte
 
-Le milestone e il backlog sono tracciati fuori dal repository.
+Le decisioni non ovvie — e i motivi per cui l'alternativa è stata scartata —
+stanno negli [ADR](docs/09-adr/), uno per decisione.
