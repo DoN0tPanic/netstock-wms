@@ -159,12 +159,83 @@ ok('il ripristino chiede file e parola di conferma', /RIPRISTINA/.test(modale));
 ok('il pulsante di ripristino parte disabilitato',
    await page.evaluate(() => [...document.querySelectorAll('button')].find(b => b.innerText.includes('Ripristina adesso'))?.disabled === true));
 
-console.log('== Barra laterale e uscita ==');
+console.log('== Archivio delle bolle ==');
 await page.keyboard.press('Escape');
+// Un PDF costruito qui: serve una bolla per provare l'archivio, e un
+// documento vero non entra in uno script.
+const pdfDiProva = (numero) => {
+  const testoPdf = `DITTA DI VERIFICA - DOCUMENTO DI TRASPORTO n. ${numero} del 05/09/2026 - merce varia`;
+  const flusso = Buffer.from(`BT /F1 11 Tf 50 700 Td (${testoPdf}) Tj ET`, 'latin1');
+  const oggetti = [
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>'),
+    Buffer.concat([Buffer.from(`<< /Length ${flusso.length} >>\nstream\n`), flusso, Buffer.from('\nendstream')]),
+    Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'),
+  ];
+  let fuori = Buffer.from('%PDF-1.4\n'); const posizioni = [];
+  oggetti.forEach((corpo, i) => {
+    posizioni.push(fuori.length);
+    fuori = Buffer.concat([fuori, Buffer.from(`${i + 1} 0 obj\n`), corpo, Buffer.from('\nendobj\n')]);
+  });
+  const xref = fuori.length;
+  fuori = Buffer.concat([fuori, Buffer.from(`xref\n0 ${oggetti.length + 1}\n0000000000 65535 f \n`)]);
+  for (const p of posizioni) fuori = Buffer.concat([fuori, Buffer.from(`${String(p).padStart(10, '0')} 00000 n \n`)]);
+  return Buffer.concat([fuori, Buffer.from(`trailer\n<< /Size ${oggetti.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`)]);
+};
+const numeroProva = `VERIFICA-${Math.floor(Math.random() * 100000)}`;
+const percorsoPdf = `${SCARICHI}/bolla-di-verifica.pdf`;
+fs.writeFileSync(percorsoPdf, pdfDiProva(numeroProva));
+await vai('/documents');
+const campoFile = await page.$('input[type="file"]');
+ok('l\'archivio ha il caricamento di un PDF', campoFile !== null);
+if (campoFile) {
+  await campoFile.uploadFile(percorsoPdf);
+  await new Promise(r => setTimeout(r, 4000));
+}
+ok('la bolla compare come scheda', await page.evaluate(() => document.querySelectorAll('li img, li svg').length > 0));
+ok('l\'anteprima della prima pagina si carica',
+   await page.evaluate(() => [...document.querySelectorAll('img')].some((i) => i.naturalWidth > 0)));
+ok('il gruppo «Da assegnare» sta in cima',
+   await page.evaluate(() => (document.querySelectorAll('section h2')[0]?.innerText ?? '').toUpperCase().includes('DA ASSEGNARE')));
+ok('la tendina del fornitore permette di crearne uno',
+   await page.evaluate(() => {
+     const s = [...document.querySelectorAll('select')].find((x) => /Fornitore di/.test(x.getAttribute('aria-label') ?? ''));
+     return !!s && [...s.options].some((o) => o.text.includes('Crea un fornitore'));
+   }));
+ok('c\'è una porta verso l\'anagrafica fornitori',
+   await page.evaluate(() => [...document.querySelectorAll('a')].some((a) => a.innerText.includes('Anagrafica fornitori'))));
+// La ricerca dentro il contenuto: il numero è scritto nel PDF, non nel nome.
+await page.evaluate(() => { const i = document.querySelector('input[aria-label="Cerca nell\'archivio"]'); i.focus(); });
+await page.keyboard.type(numeroProva);
+await new Promise(r => setTimeout(r, 1800));
+ok('si ritrova cercando quello che c\'è scritto dentro',
+   (await testo()).includes('bolla-di-verifica.pdf'), numeroProva);
+// E si rimette com'era: la verifica non lascia documenti in archivio.
+await premi('Elimina');
+await new Promise(r => setTimeout(r, 700));
+await page.evaluate(() => [...document.querySelectorAll('button')].filter((b) => b.innerText.trim() === 'Elimina').pop()?.click());
+await new Promise(r => setTimeout(r, 1500));
+// Si guarda dentro `main`, non tutta la pagina: il messaggio di conferma
+// contiene il nome del file appena tolto, e cercarlo nel corpo intero
+// direbbe «c'è ancora» proprio perché è stato cancellato.
+ok('il documento di prova è stato tolto',
+   await page.evaluate(() => !document.querySelector('main').innerText.includes('bolla-di-verifica.pdf')));
+
+console.log('== Impostazioni: lettura automatica ==');
+await vai('/admin/settings');
+const paginaImpostazioni = await testo();
+ok('sezione della lettura automatica presente', /Lettura automatica dei documenti/.test(paginaImpostazioni));
+ok('dice quale modello è in uso', /modello|Modello/.test(paginaImpostazioni));
+
+console.log('== Barra laterale e uscita ==');
 await vai('/stock');
-await premi('Riduci');
+await page.evaluate(() => document.querySelector('button[aria-label="Riduci la barra"]')?.click());
 await new Promise(r => setTimeout(r, 600));
 ok('barra ridotta alle icone', await page.evaluate(() => document.querySelector('aside').getBoundingClientRect().width) === 64);
+await page.evaluate(() => document.querySelector('button[aria-label="Espandi la barra"]')?.click());
+await new Promise(r => setTimeout(r, 600));
+ok('e si riapre', await page.evaluate(() => document.querySelector('aside').getBoundingClientRect().width) === 256);
 await premi('Esci');
 await new Promise(r => setTimeout(r, 1500));
 ok('uscita: si torna alla pagina di accesso', /Accedi al gestionale/.test(await testo()));

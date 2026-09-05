@@ -8,10 +8,13 @@ dice «funziona» senza il modo di riprovarlo invecchia il giorno dopo.
 export NETSTOCK_URL=https://indirizzo-della-tua-installazione
 export NETSTOCK_PASSWORD='…'          # dell'utente amministratore
 
-docs/10-verifica/endpoint.sh     # 34 chiamate all'API, esito atteso per ognuna
+docs/10-verifica/endpoint.sh     # 60 chiamate all'API, esito atteso per ognuna
 docs/10-verifica/database.sh     # prova a violare le garanzie del database
 docs/10-verifica/container.sh    # spegne, uccide e rimuove i container
-node docs/10-verifica/client.mjs <cartella-scarichi>   # 38 prove in un browser vero
+node docs/10-verifica/client.mjs <cartella-scarichi>   # 49 prove in un browser vero
+
+# Scrive nel registro: solo su un'istanza usa e getta, e lo pretende.
+NETSTOCK_SCRIVE=si node docs/10-verifica/flussi.mjs    # il giro completo della merce
 ```
 
 Indirizzo e credenziali non stanno negli script: sono di un'installazione
@@ -25,7 +28,7 @@ esito**, non quanti apparati ci fossero nel magazzino usato per provarlo.
 
 ---
 
-## 1. Endpoint — 34 prove, 0 fallite
+## 1. Endpoint — 60 prove, 0 fallite
 
 Ogni chiamata è verificata sul **codice atteso**, non sul fatto che risponda:
 un 200 dove serviva un 403 è un difetto, non un successo.
@@ -227,3 +230,49 @@ dopo, a seconda dell'ordine.
 **Limite dichiarato:** durante il ripristino le tabelle vengono ricreate, quindi
 chi sta lavorando in quel momento riceve errori. Va fatto quando non c'è
 nessuno dentro.
+
+
+---
+
+## 6. Ripassata completa — cosa ha trovato
+
+Le prove qui sopra sono state estese a tutto quello che è stato aggiunto dopo
+la prima stesura — archivio delle bolle, riconoscimento del fornitore,
+anteprime, scelta del modello, conservazione del registro di controllo — e
+rilanciate. Quattro difetti, tre negli strumenti di verifica e **uno nel
+prodotto**.
+
+### Nel prodotto
+
+- **`GET /settings` era leggibile da un utente in sola lettura.** La scrittura
+  era riservata agli amministratori, la lettura no. Dentro non ci sono
+  segreti, ma la configurazione di un sistema dice come è fatto, e chi non può
+  cambiarla non ha ragione di leggerla. Ora pretende il ruolo di
+  amministratore, e un test passa in rassegna le rotte amministrative
+  controllando che ognuna abbia il guardiano che le compete.
+
+### Negli strumenti
+
+- **La sezione «Permessi» era un titolo senza prove sotto**: prometteva una
+  verifica che non esisteva, e infatti il difetto qui sopra era passato
+  inosservato. Adesso crea un utente in sola lettura, gli fa provare sette
+  cose che non deve poter fare, e lo disattiva.
+- **Lasciava un account chiuso a ogni esecuzione**: la cancellazione
+  definitiva non riesce per chi ha agito, perché le sue righe di registro lo
+  trattengono. Ora l'account è uno solo, riusato, con una password nuova ogni
+  volta e disattivato alla fine.
+- **La prova della barra laterale cercava un pulsante che non esiste più**
+  («Riduci»): il comando è diventato un'icona senza testo, e la prova falliva
+  su una funzione che funziona.
+
+### Coperture nuove
+
+Il giro completo della merce — ricezione con acquisizione dei seriali, il
+pezzo che compare a magazzino con la sua cronologia, lo storno che aggiunge
+una riga invece di toglierne una — non era provato da nessuna parte fino in
+fondo: le pagine si aprivano, ma nessuno premeva «Registra». Ora c'è
+`flussi.mjs`, che lo fa davvero e per questo pretende un'istanza usa e getta.
+
+Provato: dopo lo storno di un carico l'unità risulta «rimossa per errore di
+inserimento», il carico resta scritto, il movimento di rettifica si aggiunge,
+e la riconciliazione fra registro e giacenza non segnala nulla.

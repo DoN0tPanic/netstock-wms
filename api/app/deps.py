@@ -46,6 +46,12 @@ def require_role(
             )
         return user
 
+    # Il ruolo resta leggibile dall'esterno: serve a un test che passa in
+    # rassegna le rotte e controlla che ognuna pretenda quello che deve.
+    # Senza, l'unico modo di accorgersi di un guardiano mancante è provare
+    # l'endpoint con un utente vero — ed è così che è saltato fuori che
+    # `GET /settings` non ne aveva nessuno.
+    _dependency.ruolo_minimo = minimum_role  # type: ignore[attr-defined]
     return _dependency
 
 

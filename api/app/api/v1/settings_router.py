@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
-from app.deps import CurrentUser, DbSession, require_role
+from app.deps import DbSession, require_role
 from app.exceptions import ValidationAppError
 from app.models.app_settings import AppSetting
 from app.models.enums import UserRole
@@ -20,7 +20,19 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("", response_model=list[AppSettingResponse])
-async def list_settings(db: DbSession, user: CurrentUser) -> Any:
+async def list_settings(
+    db: DbSession,
+    user: User = Depends(require_role(UserRole.admin)),
+) -> Any:
+    """La configurazione si legge solo da amministratore.
+
+    La scrittura lo era già; la lettura no, e un utente in sola lettura poteva
+    chiedere l'elenco pur non avendo la pagina che lo mostra. Qui dentro non ci
+    sono segreti — soglie e nome del modello — ma la configurazione di un
+    sistema dice come è fatto, e chi non può cambiarla non ha ragione di
+    leggerla. Trovato provando i permessi di un utente `viewer`, non leggendo
+    il codice: la sezione che doveva provarli era un titolo senza prove sotto.
+    """
     result = await db.execute(select(AppSetting))
     return result.scalars().all()
 
