@@ -1,8 +1,8 @@
 import io
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from sqlalchemy import text
@@ -91,7 +91,14 @@ _FILTER_CLAUSE = """
         OR part_number ILIKE '%' || CAST(:q AS text) || '%'
         OR delivery_note_number ILIKE '%' || CAST(:q AS text) || '%'
     )
-    AND (CAST(:location_id AS uuid) IS NULL OR location_id = CAST(:location_id AS uuid))
+    -- Ubicazioni: nessuna (tutte), una, o parecchie insieme. Un magazzino
+    -- vero non ha uno scaffale per volta — «quanti ne ho fra il CED e i due
+    -- depositi» è la domanda normale, e con un filtro a scelta singola si
+    -- risponde facendo tre ricerche e sommando a mente.
+    AND (
+        CAST(:location_ids AS uuid[]) IS NULL
+        OR location_id = ANY(CAST(:location_ids AS uuid[]))
+    )
     AND (CAST(:vendor_id AS uuid) IS NULL OR vendor_id = CAST(:vendor_id AS uuid))
     AND (CAST(:category_id AS uuid) IS NULL OR category_id = CAST(:category_id AS uuid))
     AND (CAST(:condition AS text) IS NULL OR condition = CAST(:condition AS text))
@@ -102,7 +109,7 @@ _FILTER_CLAUSE = """
 
 def _build_params(
     q: str | None,
-    location: uuid.UUID | None,
+    location: list[uuid.UUID] | None,
     vendor: uuid.UUID | None,
     category: uuid.UUID | None,
     condition: str | None,
@@ -111,7 +118,7 @@ def _build_params(
 ) -> dict[str, Any]:
     return {
         "q": q,
-        "location_id": str(location) if location else None,
+        "location_ids": [str(u) for u in location] if location else None,
         "vendor_id": str(vendor) if vendor else None,
         "category_id": str(category) if category else None,
         "condition": condition,
@@ -125,7 +132,10 @@ async def list_inventory(
     db: DbSession,
     user: CurrentUser,
     q: str | None = None,
-    location: uuid.UUID | None = None,
+    # `?location=…&location=…`: ripetuto, non una lista separata da virgole —
+    # è la forma che i browser generano da soli e che FastAPI valida elemento
+    # per elemento.
+    location: Annotated[list[uuid.UUID] | None, Query()] = None,
     vendor: uuid.UUID | None = None,
     category: uuid.UUID | None = None,
     condition: str | None = None,
@@ -226,7 +236,10 @@ async def export_inventory(
     user: CurrentUser,
     format: str = "csv",
     q: str | None = None,
-    location: uuid.UUID | None = None,
+    # `?location=…&location=…`: ripetuto, non una lista separata da virgole —
+    # è la forma che i browser generano da soli e che FastAPI valida elemento
+    # per elemento.
+    location: Annotated[list[uuid.UUID] | None, Query()] = None,
     vendor: uuid.UUID | None = None,
     category: uuid.UUID | None = None,
     condition: str | None = None,

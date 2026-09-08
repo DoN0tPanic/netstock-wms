@@ -18,6 +18,7 @@ import {
 } from "../api/queries";
 import { COLONNE_MAGAZZINO, COLONNE_PREDEFINITE, leggiColonne, scriviColonne, type ColonnaMagazzino } from "./inventoryColumns";
 import { percorsoUbicazione } from "../lib/locations";
+import { SceltaMultipla } from "../components/SceltaMultipla";
 import { CatalogItemModal } from "../components/forms/CatalogItemModal";
 import { ReceiveForm } from "../components/forms/ReceiveForm";
 import { Badge, Button, Combobox, Input, Modal, Select, Table, useToast } from "../components/ui";
@@ -370,7 +371,7 @@ export function Stock() {
   const alternaColonna = (chiave: ColonnaMagazzino) => setColonne((attuali) => attuali.includes(chiave)
     ? attuali.filter((voce) => voce !== chiave)
     : COLONNE_MAGAZZINO.filter((colonna) => attuali.includes(colonna.chiave) || colonna.chiave === chiave).map((colonna) => colonna.chiave));
-  const change = (key: keyof InventoryFilters, value: string | number) => setFilters((current) => ({ ...current, [key]: value, page: key === "page" ? Number(value) : 1 }));
+  const change = (key: keyof InventoryFilters, value: string | number | string[]) => setFilters((current) => ({ ...current, [key]: value, page: key === "page" ? Number(value) : 1 }));
   // L'ancora viene agganciata al documento e l'indirizzo temporaneo liberato
   // dopo, non nello stesso istante del clic: revocarlo subito può annullare
   // lo scaricamento appena avviato.
@@ -397,7 +398,7 @@ export function Stock() {
   };
   const actionClass = "inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50";
   const rows = query.data?.items ?? [];
-  const attivi = [filters.q, filters.location, filters.vendor, filters.category, filters.condition, filters.status].filter(Boolean).length;
+  const attivi = [filters.q, filters.vendor, filters.category, filters.condition, filters.status].filter(Boolean).length + (filters.location.length ? 1 : 0);
   const hasFilters = attivi > 0;
   const allVisibleSelected = rows.length > 0 && rows.every((row) => selected.has(row.row_key));
   const toggle = (row: InventoryRow) => setSelected((current) => { const next = new Map(current); if (next.has(row.row_key)) next.delete(row.row_key); else next.set(row.row_key, row); return next; });
@@ -451,7 +452,7 @@ export function Stock() {
           <span className="flex items-center gap-2"><SlidersHorizontal size={17} aria-hidden/>Filtri</span>
           <span className="text-sm font-normal text-slate-600">{attivi ? `${attivi} attiv${attivi === 1 ? "o" : "i"}` : "nessuno"}</span>
         </button>
-      <div className={`${filtriAperti || hasFilters ? "grid" : "hidden"} gap-3 p-4 md:grid md:grid-cols-3 xl:grid-cols-6`}><Input aria-label="Cerca nel magazzino" placeholder="Seriale, MAC, modello, bolla" value={filters.q} onChange={(event) => change("q", event.target.value)}/><Select aria-label="Ubicazione" value={filters.location} onChange={(event) => change("location", event.target.value)}><option value="">Tutte le ubicazioni</option>{locations.data?.items.map((row) => <option key={row.id} value={row.id}>{percorsoUbicazione(locations.data?.items ?? [], row.id)}</option>)}</Select><Select aria-label="Vendor" value={filters.vendor} onChange={(event) => change("vendor", event.target.value)}><option value="">Tutti i vendor</option>{vendors.data?.items.map((row) => <option key={row.id} value={row.id}>{row.code} — {row.name}</option>)}</Select><Select aria-label="Categoria" value={filters.category} onChange={(event) => change("category", event.target.value)}><option value="">Tutte le categorie</option>{categories.data?.items.map((row) => <option key={row.id} value={row.id}>{row.code} — {row.name}</option>)}</Select><Select aria-label="Condizione" value={filters.condition} onChange={(event) => change("condition", event.target.value)}><option value="">Tutte le condizioni</option>{(Object.keys(conditionLabels) as ItemCondition[]).map((value) => <option key={value} value={value}>{conditionLabels[value]}</option>)}</Select><Select aria-label="Stato" value={filters.status} onChange={(event) => change("status", event.target.value)}><option value="">Tutti gli stati</option>{(Object.keys(unitStatusLabels) as UnitStatus[]).map((value) => <option key={value} value={value}>{unitStatusLabels[value]}</option>)}</Select></div>
+      <div className={`${filtriAperti || hasFilters ? "grid" : "hidden"} gap-3 p-4 md:grid md:grid-cols-3 xl:grid-cols-6`}><Input aria-label="Cerca nel magazzino" placeholder="Seriale, MAC, modello, bolla" value={filters.q} onChange={(event) => change("q", event.target.value)}/><SceltaMultipla etichetta="Ubicazioni" vuoto="Tutte le ubicazioni" scelte={filters.location} onCambia={(scelte) => change("location", scelte)} voci={(locations.data?.items ?? []).map((row) => ({ id: row.id, etichetta: percorsoUbicazione(locations.data?.items ?? [], row.id) }))}/><Select aria-label="Vendor" value={filters.vendor} onChange={(event) => change("vendor", event.target.value)}><option value="">Tutti i vendor</option>{vendors.data?.items.map((row) => <option key={row.id} value={row.id}>{row.code} — {row.name}</option>)}</Select><Select aria-label="Categoria" value={filters.category} onChange={(event) => change("category", event.target.value)}><option value="">Tutte le categorie</option>{categories.data?.items.map((row) => <option key={row.id} value={row.id}>{row.code} — {row.name}</option>)}</Select><Select aria-label="Condizione" value={filters.condition} onChange={(event) => change("condition", event.target.value)}><option value="">Tutte le condizioni</option>{(Object.keys(conditionLabels) as ItemCondition[]).map((value) => <option key={value} value={value}>{conditionLabels[value]}</option>)}</Select><Select aria-label="Stato" value={filters.status} onChange={(event) => change("status", event.target.value)}><option value="">Tutti gli stati</option>{(Object.keys(unitStatusLabels) as UnitStatus[]).map((value) => <option key={value} value={value}>{unitStatusLabels[value]}</option>)}</Select></div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600" aria-live="polite">{query.data ? `${query.data.total} ${query.data.total === 1 ? "riga" : "righe"}` : ""}</p>
@@ -459,7 +460,7 @@ export function Stock() {
       </div>
       {selected.size > 0 && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3"><strong className="text-sm">{selected.size} righe selezionate</strong><Button onClick={() => setTransferring(true)}>Sposta</Button><Button variant="ghost" onClick={() => setSelected(new Map())}>Deseleziona</Button></div>}
       {query.isLoading ? <Loading/> : query.isError || !query.data ? <ErrorMessage/> : <><Table rows={query.data.items} keyOf={(row) => row.row_key} empty={hasFilters
-          ? <span>Nessun pezzo corrisponde ai filtri. <button type="button" className="text-blue-700 underline" onClick={() => setFilters({ ...readInventoryFilters(storageKey), q: "", location: "", vendor: "", category: "", condition: "", status: "", page: 1 })}>Azzera i filtri</button></span>
+          ? <span>Nessun pezzo corrisponde ai filtri. <button type="button" className="text-blue-700 underline" onClick={() => setFilters({ ...readInventoryFilters(storageKey), q: "", location: [], vendor: "", category: "", condition: "", status: "", page: 1 })}>Azzera i filtri</button></span>
           : <span>Il magazzino è vuoto. Inizia da <Link className="text-blue-700 underline" to="/receive">Aggiungi merce</Link>.</span>} columns={[{ key: "select", label: "", render: (row: InventoryRow) => <input type="checkbox" className="h-4 w-4" aria-label={`Seleziona ${row.part_number}`} checked={selected.has(row.row_key)} onChange={() => toggle(row)}/> }, ...colonne.map((chiave) => inventoryColumns(locations.data?.items ?? [])[chiave])]}/>{rows.length > 0 && <><label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4" checked={allVisibleSelected} onChange={toggleAll}/>Seleziona tutte le righe della pagina</label><div className="flex flex-wrap items-center justify-between gap-3"><span className="text-sm text-slate-600">{query.data.total} righe totali</span>{query.data.total > query.data.page_size && <div className="flex items-center gap-2"><Button variant="secondary" disabled={filters.page <= 1} onClick={() => change("page", filters.page - 1)}>Precedente</Button><span className="text-sm">Pagina {filters.page} di {Math.max(1, Math.ceil(query.data.total / query.data.page_size))}</span><Button variant="secondary" disabled={filters.page * query.data.page_size >= query.data.total} onClick={() => change("page", filters.page + 1)}>Successiva</Button></div>}</div></>}</>}
       <Modal open={sceltaColonne} title="Colonne da mostrare" onClose={() => setSceltaColonne(false)}>
         <div className="space-y-3">
@@ -901,7 +902,7 @@ export function Receive() {
   );
 }
 export const movementTypeLabels: Record<MovementType, string> = { receipt: "Carico", issue: "Uscita", transfer: "Spostamento", return: "Reso", rma_out: "Invio RMA", rma_in: "Rientro RMA", adjustment: "Rettifica", scrap: "Rottamazione" };
-const emptyMovementFilters = { type: "", location: "", reference: "", date_from: "", date_to: "", page: 1 };
+const emptyMovementFilters = { type: "", location: [] as string[], reference: "", date_from: "", date_to: "", page: 1 };
 export function Movements() {
   const [filters, setFilters] = useState(emptyMovementFilters);
   const locations = useLocations();
@@ -912,7 +913,7 @@ export function Movements() {
   const [reversing, setReversing] = useState<StockMovement | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const change = (key: keyof typeof emptyMovementFilters, value: string | number) => setFilters((current) => ({ ...current, [key]: value, page: key === "page" ? Number(value) : 1 }));
+  const change = (key: keyof typeof emptyMovementFilters, value: string | number | string[]) => setFilters((current) => ({ ...current, [key]: value, page: key === "page" ? Number(value) : 1 }));
   const exportCsv = async () => {
     try {
       const blob = await movementsApi.export("csv", filters.date_from || undefined, filters.date_to || undefined);
@@ -937,7 +938,7 @@ export function Movements() {
     <Page title="Movimenti" description="Registro cronologico: ogni riga è immutabile, si corregge solo con uno storno">
       <div className="grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-2 xl:grid-cols-5">
         <Select aria-label="Tipo di movimento" value={filters.type} onChange={(event) => change("type", event.target.value)}><option value="">Tutti i tipi</option>{(Object.keys(movementTypeLabels) as MovementType[]).map((value) => <option key={value} value={value}>{movementTypeLabels[value]}</option>)}</Select>
-        <Select aria-label="Ubicazione" value={filters.location} onChange={(event) => change("location", event.target.value)}><option value="">Tutte le ubicazioni</option>{locations.data?.items.map((row) => <option key={row.id} value={row.id}>{percorsoUbicazione(locations.data?.items ?? [], row.id)}</option>)}</Select>
+        <SceltaMultipla etichetta="Ubicazioni" vuoto="Tutte le ubicazioni" scelte={filters.location} onCambia={(scelte) => change("location", scelte)} voci={(locations.data?.items ?? []).map((row) => ({ id: row.id, etichetta: percorsoUbicazione(locations.data?.items ?? [], row.id) }))}/>
         <Input aria-label="Riferimento" placeholder="Riferimento" value={filters.reference} onChange={(event) => change("reference", event.target.value)}/>
         <Input aria-label="Dal giorno" type="date" value={filters.date_from} onChange={(event) => change("date_from", event.target.value)}/>
         <Input aria-label="Al giorno" type="date" value={filters.date_to} onChange={(event) => change("date_to", event.target.value)}/>

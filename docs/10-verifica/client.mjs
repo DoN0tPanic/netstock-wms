@@ -73,6 +73,28 @@ ok('ubicazione per esteso, non il solo codice',
    ubicazioni.some((u) => u.includes(' ') || u.includes('›')), ubicazioni[0] ? '(prima riga letta)' : '');
 await page.evaluate(() => { const s = document.querySelector('select[aria-label="Stato"]'); s.value = 'in_stock'; s.dispatchEvent(new Event('change', { bubbles: true })); });
 await new Promise(r => setTimeout(r, 1200));
+// Ubicazioni: più di una insieme. Si spuntano due posti senza merce e
+// l'elenco deve svuotarsi — se resta pieno il filtro non sta filtrando.
+const righeMagazzino = () => page.evaluate(() => Number((document.body.innerText.match(/(\d+)\s+righ/) ?? [0, 0])[1]));
+const primaDelFiltro = await righeMagazzino();
+ok('il filtro ubicazioni è a scelta multipla',
+   await page.evaluate(() => !!document.querySelector('button[aria-label="Ubicazioni"][aria-haspopup="listbox"]')));
+await page.evaluate(() => document.querySelector('button[aria-label="Ubicazioni"]')?.click());
+await new Promise(r => setTimeout(r, 400));
+const spuntaUbicazione = (t) => page.evaluate((x) => {
+  const o = [...document.querySelectorAll('[role="option"]')].find((e) => e.innerText.includes(x));
+  if (!o) return false; o.click(); return true;
+}, t);
+const dueSpuntate = (await spuntaUbicazione('A01')) && (await spuntaUbicazione('A02'));
+await new Promise(r => setTimeout(r, 1500));
+ok('due ubicazioni insieme restringono l\'elenco', dueSpuntate && await righeMagazzino() < primaDelFiltro);
+ok('il pulsante dice quante sono selezionate',
+   /2 selezionate/.test(await page.evaluate(() => document.querySelector('button[aria-label="Ubicazioni"]').innerText)));
+await spuntaUbicazione('Tutte le ubicazioni');
+await new Promise(r => setTimeout(r, 1500));
+ok('«Tutte» rimette a posto', await righeMagazzino() === primaDelFiltro);
+await page.keyboard.press('Escape');
+
 ok('filtro per stato applicato', (await page.$$('tbody tr')).length > 0);
 await premi('Colonne');
 await new Promise(r => setTimeout(r, 500));

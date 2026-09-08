@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,7 +57,10 @@ async def list_movements(
     type: MovementType | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    location: uuid.UUID | None = None,
+    # Più ubicazioni insieme, come nel magazzino: un movimento la tocca da
+    # una parte o dall'altra, quindi «fra questi tre posti» vuol dire che
+    # partenza o destinazione è uno dei tre.
+    location: Annotated[list[uuid.UUID] | None, Query()] = None,
     reference: str | None = None,
     page: int = 1,
     page_size: int = 50,
@@ -76,8 +79,8 @@ async def list_movements(
         filters.append(StockMovement.occurred_at <= date_to)
     if location:
         filters.append(
-            (StockMovement.location_from_id == location)
-            | (StockMovement.location_to_id == location)
+            StockMovement.location_from_id.in_(location)
+            | StockMovement.location_to_id.in_(location)
         )
     if reference:
         filters.append(StockMovement.reference.ilike(f"%{reference}%"))

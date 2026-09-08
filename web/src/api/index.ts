@@ -1,7 +1,9 @@
 import { ApiError, apiDownload, apiRequest } from './client';
 import type { AdjustRequest, AppSetting, ArchivedDocument, BackupStatus, ContoFornitore, RestoreResult, StatoAi, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite } from '../types/api';
 
-type Query = Record<string, string | number | boolean | null | undefined>;
+// Una chiave può portare più valori (`?location=a&location=b`): serve ai
+// filtri che accettano più scelte insieme.
+type Query = Record<string, string | number | boolean | null | undefined | string[]>;
 const crud = <T, W>(resource: string) => ({
   list: (query: Query = {}) => apiRequest<Page<T>>(`/${resource}`, { query }),
   create: (body: W) => apiRequest<T>(`/${resource}`, { method: 'POST', body }),

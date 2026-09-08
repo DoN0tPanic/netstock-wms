@@ -26,6 +26,8 @@ La bolla si può anche **fotografare**: da una foto, una scansione o un PDF il s
 
 Pezzi serializzati e materiale sfuso nella stessa vista: uno switch con il suo seriale è una riga, i centoventi patch cord in uno scaffale sono una riga con la quantità. Filtri per ubicazione, fornitore, categoria, condizione e stato; ricerca per seriale, MAC, modello o numero di bolla.
 
+**Le ubicazioni si scelgono più d'una alla volta**, qui e nei Movimenti: la domanda di un magazzino vero è «quanti ne ho fra il deposito e il CED», e con un filtro a scelta singola ci si risponde facendo due ricerche e sommando a mente. Il conteggio, l'esportazione CSV e l'archivio ZIP rispettano la stessa scelta.
+
 Le colonne si scelgono (`Colonne`) e la scelta resta su quel computer. **L'esportazione CSV porta tutto**, anche le colonne nascoste: quello che si nasconde è per guardare meglio, non per esportare di meno. `Esporta tutto (ZIP)` scarica l'intero magazzino in undici file CSV, uno per tabella, con un `LEGGIMI.txt` che spiega cosa c'è dentro.
 
 ### La storia di un singolo apparato

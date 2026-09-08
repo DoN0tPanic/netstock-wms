@@ -106,7 +106,7 @@ async def test_inventory_filter_by_location(app_db_session) -> None:
         db=app_db_session,
         user=_FakeUser(role=UserRole.viewer),
         q=serial_number,
-        location=location_id,
+        location=[location_id],
     )
     assert matching.total == 1
 
@@ -114,6 +114,27 @@ async def test_inventory_filter_by_location(app_db_session) -> None:
         db=app_db_session,
         user=_FakeUser(role=UserRole.viewer),
         q=serial_number,
-        location=other_location.id,
+        location=[other_location.id],
     )
     assert non_matching.total == 0
+
+    # Più ubicazioni insieme: la riga sta in una delle due, e va trovata.
+    # È la domanda che un magazzino vero pone — «quanti ne ho fra il deposito
+    # e il CED» — e con un filtro a scelta singola ci si risponde facendo due
+    # ricerche e sommando a mente.
+    fra_due = await list_inventory(
+        db=app_db_session,
+        user=_FakeUser(role=UserRole.viewer),
+        q=serial_number,
+        location=[location_id, other_location.id],
+    )
+    assert fra_due.total == 1
+
+    # Nessuna ubicazione scelta non vuol dire «nessuna riga»: vuol dire tutte.
+    senza_filtro = await list_inventory(
+        db=app_db_session,
+        user=_FakeUser(role=UserRole.viewer),
+        q=serial_number,
+        location=[],
+    )
+    assert senza_filtro.total == 1
