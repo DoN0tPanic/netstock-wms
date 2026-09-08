@@ -69,7 +69,19 @@ def build_registry_router(
             await db.execute(select(func.count()).select_from(model).where(*filters))
         ).scalar_one()
 
-        stmt = select(model).where(*filters).offset((page - 1) * page_size).limit(page_size)
+        # Ordine alfabetico sul primo campo di ricerca (il codice, o il nome
+        # dove il codice non c'è), con l'id a rompere la parità. Senza ORDER BY
+        # l'elenco seguiva l'ordine fisico della tabella: cambiava a ogni
+        # modifica, e con più di una pagina la stessa riga poteva comparire due
+        # volte e un'altra mai.
+        ordine = [getattr(model, search_fields[0]), model.id]
+        stmt = (
+            select(model)
+            .where(*filters)
+            .order_by(*ordine)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
         result = await db.execute(stmt)
         items: Sequence[Any] = result.scalars().all()
         return Page(items=list(items), total=total, page=page, page_size=page_size)

@@ -16,6 +16,7 @@ import {
   useSuppliers,
   useVendors,
 } from "../api/queries";
+import { useTendinaPaginata } from "../api/tendina";
 import { COLONNE_MAGAZZINO, COLONNE_PREDEFINITE, leggiColonne, scriviColonne, type ColonnaMagazzino } from "./inventoryColumns";
 import { percorsoUbicazione } from "../lib/locations";
 import { SceltaMultipla } from "../components/SceltaMultipla";
@@ -512,9 +513,6 @@ export function UnitDetail() {
   const [editingDetails, setEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState({ serial_number: "", mac_address: "", location_id: "", warranty_end: "", contract_ref: "", notes: "" });
   const [savingDetails, setSavingDetails] = useState(false);
-  const [deliveryNoteQuery, setDeliveryNoteQuery] = useState("");
-  const [deliveryNoteOptions, setDeliveryNoteOptions] = useState<DeliveryNote[]>([]);
-  const [deliveryNoteSearching, setDeliveryNoteSearching] = useState(false);
   const [attachingNote, setAttachingNote] = useState(false);
   const [scrapping, setScrapping] = useState(false);
   const [scrapReason, setScrapReason] = useState("");
@@ -532,24 +530,17 @@ export function UnitDetail() {
     queryFn: () => unitsApi.movements(id),
     enabled: Boolean(id),
   });
-  useEffect(() => {
-    if (!editingDetails || query.data?.delivery_note_line_id) return;
-    setDeliveryNoteSearching(true);
-    const timer = window.setTimeout(() => {
-      void deliveryNotesApi
-        .list({ q: deliveryNoteQuery || undefined, page_size: 8 })
-        .then((page) => setDeliveryNoteOptions(page.items))
-        .catch(() => {})
-        .finally(() => setDeliveryNoteSearching(false));
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [deliveryNoteQuery, editingDetails, query.data?.delivery_note_line_id]);
+  // La ricerca parte solo a modale aperta e solo se la bolla manca davvero:
+  // interrogare il server per una tendina che nessuno vedrà è lavoro sprecato.
+  const tendinaBolle = useTendinaPaginata<DeliveryNote>((parametri) => deliveryNotesApi.list(parametri), {
+    attiva: editingDetails && !query.data?.delivery_note_line_id,
+  });
   const attachNote = async (deliveryNoteId: string) => {
     setAttachingNote(true);
     try {
       await unitsApi.attachDeliveryNote(id, deliveryNoteId);
       toast.show("Bolla collegata.", "success");
-      setDeliveryNoteQuery("");
+      tendinaBolle.setTesto("");
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["unit", id] }), queryClient.invalidateQueries({ queryKey: ["inventory"] })]);
     } catch (reason) {
       toast.show(reason instanceof Error ? reason.message : "Impossibile collegare la bolla.", "error");
@@ -656,11 +647,14 @@ export function UnitDetail() {
           {!unit.delivery_note_line_id && <Combobox
             label="Bolla"
             placeholder="Cerca per numero bolla…"
-            query={deliveryNoteQuery}
-            onQueryChange={setDeliveryNoteQuery}
-            loading={deliveryNoteSearching}
+            query={tendinaBolle.testo}
+            onQueryChange={tendinaBolle.setTesto}
+            loading={tendinaBolle.cercando}
+            total={tendinaBolle.totale}
+            loadingMore={tendinaBolle.caricandoAltre}
+            onLoadMore={tendinaBolle.caricaAltre}
             disabled={attachingNote}
-            options={deliveryNoteOptions.map((note) => ({ id: note.id, label: note.number, sublabel: note.note_date }))}
+            options={tendinaBolle.voci.map((note) => ({ id: note.id, label: note.number, sublabel: note.note_date }))}
             onSelect={(noteId) => void attachNote(noteId)}
             hint="Questo pezzo è stato ricevuto senza bolla: collegala qui appena disponibile."
           />}
@@ -720,7 +714,11 @@ function Data({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 export function DeliveryNotes() {
-  const query = useDeliveryNotes();
+  // Prima si vedevano le cinquanta più recenti e basta: nessun avviso, nessun
+  // modo di arrivare alle precedenti. Con l'archivio di un anno le vecchie
+  // erano semplicemente irraggiungibili.
+  const [pagina, setPagina] = useState(1);
+  const query = useDeliveryNotes({ page: pagina });
   const suppliers = useSuppliers();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -817,6 +815,16 @@ export function DeliveryNotes() {
             },
           ]}
         />
+      )}
+      {query.data && query.data.total > query.data.page_size && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm text-slate-600">{query.data.total} bolle in tutto</span>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>Precedente</Button>
+            <span className="text-sm">Pagina {pagina} di {Math.max(1, Math.ceil(query.data.total / query.data.page_size))}</span>
+            <Button variant="secondary" disabled={pagina * query.data.page_size >= query.data.total} onClick={() => setPagina(pagina + 1)}>Successiva</Button>
+          </div>
+        </div>
       )}
       <Modal open={deleting !== null} title="Elimina bolla" onClose={() => !busy && setDeleting(null)}>
         <div className="space-y-3">

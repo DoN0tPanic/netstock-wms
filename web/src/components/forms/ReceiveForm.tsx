@@ -10,6 +10,7 @@ import { ReceiveLineCard, newPiece, normalizeSerial, type ReceiveLine } from './
 import { LabelCapture, type LabelReading } from './LabelCapture';
 import { EXTRACTION_FILE_ACCEPT, prepareExtractionImage } from '../scanner/PhotoExtract';
 import { useSchermoStretto } from '../../hooks/useSchermoStretto';
+import { tutteLeVoci, useTendinaPaginata } from '../../api/tendina';
 
 type Warning = { code: string; message: string; serial_number?: string };
 type PendingReceive = { kind: 'note'; noteId: string; body: ReceiveRequest } | { kind: 'free'; body: FreeReceiveRequest };
@@ -42,8 +43,22 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
   const [notes, setNotes] = useState<DeliveryNote[]>([]); const [noteMode, setNoteMode] = useState('');
   const [noteDraft, setNoteDraft] = useState({ number: '', note_date: today(), supplier_id: '', po_number: '' });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]); const [supplierName, setSupplierName] = useState(''); const [showSupplier, setShowSupplier] = useState(false);
-  const [lines, setLines] = useState<ReceiveLine[]>([freshLine()]); const [catalog, setCatalog] = useState<CatalogItem[]>([]); const [catalogQuery, setCatalogQuery] = useState(''); const [catalogOptions, setCatalogOptions] = useState<CatalogItem[]>([]); const [catalogSearching, setCatalogSearching] = useState(false);
-  const [locations, setLocations] = useState<Location[]>([]); const [locationQuery, setLocationQuery] = useState(''); const [defaultLocationId, setDefaultLocationId] = useState(''); const [locationOptions, setLocationOptions] = useState<Location[]>([]); const [locationSearching, setLocationSearching] = useState(false);
+  const [lines, setLines] = useState<ReceiveLine[]>([freshLine()]); const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]); const [defaultLocationId, setDefaultLocationId] = useState('');
+  // Le due tendine di ricerca: le voci arrivano a pagine e continuano a
+  // scorrimento. `catalog` e `locations` restano la copia locale di tutto
+  // quello che è passato di qui, perché le righe già compilate devono poter
+  // mostrare il proprio articolo anche dopo che la ricerca è cambiata.
+  const tendinaCatalogo = useTendinaPaginata<CatalogItem>((parametri) => catalogApi.list(parametri), {
+    onPagina: (voci) => setCatalog((old) => merge(old, voci)),
+    onErrore: (motivo) => setError(messageOf(motivo)),
+  });
+  const tendinaUbicazioni = useTendinaPaginata<Location>((parametri) => locationsApi.list(parametri), {
+    onPagina: (voci) => setLocations((old) => merge(old, voci)),
+    onErrore: (motivo) => setError(messageOf(motivo)),
+  });
+  const { testo: catalogQuery, setTesto: setCatalogQuery, voci: catalogOptions, cercando: catalogSearching } = tendinaCatalogo;
+  const { testo: locationQuery, setTesto: setLocationQuery, voci: locationOptions, cercando: locationSearching } = tendinaUbicazioni;
   const [templates, setTemplates] = useState<ExtractionTemplate[]>([]);
   const [itemForLine, setItemForLine] = useState<string | null>(null);
   const [showLocation, setShowLocation] = useState(false); const [locationDraft, setLocationDraft] = useState({ name: '', type: 'shelf' as LocationType });
@@ -56,9 +71,7 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
   /** Cosa si vede adesso: su scrivania tutto, su telefono il passo corrente. */
   const vedi = (numero: number) => !stretto || passo === numero;
 
-  useEffect(() => { void Promise.all([deliveryNotesApi.list({ is_closed: false }).then((p) => setNotes(p.items)), suppliersApi.list({ page_size: 200 }).then((p) => setSuppliers(p.items)), locationsApi.list({ page_size: 200 }).then((p) => setLocations(p.items)), extractionApi.templates.list().then(setTemplates)]).catch((r) => setError(messageOf(r))); }, []);
-  useEffect(() => { setCatalogSearching(true); const timer = window.setTimeout(() => void catalogApi.list({ q: catalogQuery || undefined, page_size: 8 }).then((p) => { setCatalogOptions(p.items); setCatalog((old) => merge(old, p.items)); }).catch((r) => setError(messageOf(r))).finally(() => setCatalogSearching(false)), 300); return () => window.clearTimeout(timer); }, [catalogQuery]);
-  useEffect(() => { setLocationSearching(true); const timer = window.setTimeout(() => void locationsApi.list({ q: locationQuery || undefined, page_size: 8 }).then((p) => { setLocationOptions(p.items); setLocations((old) => merge(old, p.items)); }).catch((r) => setError(messageOf(r))).finally(() => setLocationSearching(false)), 300); return () => window.clearTimeout(timer); }, [locationQuery]);
+  useEffect(() => { void Promise.all([deliveryNotesApi.list({ is_closed: false }).then((p) => setNotes(p.items)), tutteLeVoci((parametri) => suppliersApi.list(parametri)).then(setSuppliers), tutteLeVoci((parametri) => locationsApi.list(parametri)).then((voci) => setLocations((old) => merge(old, voci))), extractionApi.templates.list().then(setTemplates)]).catch((r) => setError(messageOf(r))); }, []);
 
   // La lettura strutturale finisce dopo la risposta che l'ha avviata: con una
   // GPU in pochi secondi, senza in qualche minuto. Si interroga finché non è
@@ -236,16 +249,16 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
     {scanningNote && <Busy title="Lettura della bolla in corso…">Sto elaborando le pagine caricate. Una foto richiede più tempo di un PDF, e ogni pagina in più si somma. Non ricaricare la pagina.</Busy>}
     <DeliveryNoteProposal analysis={analysis} onApply={(chosen) => void applyProposal(chosen)} onCreateItem={setItemFromProposal}/>
     </>}
-    {noteMode && <>{vedi(2) && <section className="space-y-3 rounded-xl border bg-white p-4"><h2 className="text-lg font-semibold">2. Ubicazione predefinita</h2><Combobox label="Ubicazione" placeholder="Cerca per codice o nome…" query={locationQuery} onQueryChange={setLocationQuery} loading={locationSearching} options={locationOptions.map((location) => ({ id: location.id, label: `${location.code} · ${location.name}` }))} selectedLabel={locations.find((location) => location.id === defaultLocationId) ? `${locations.find((location) => location.id === defaultLocationId)!.code} · ${locations.find((location) => location.id === defaultLocationId)!.name}` : undefined} extraOption={{ id: '__new', label: '+ Nuova ubicazione' }} onSelect={(id) => id === '__new' ? setShowLocation(true) : chooseDefaultLocation(id)} hint="Vale per i prossimi pezzi; quelli già acquisiti conservano la propria ubicazione."/></section>}
+    {noteMode && <>{vedi(2) && <section className="space-y-3 rounded-xl border bg-white p-4"><h2 className="text-lg font-semibold">2. Ubicazione predefinita</h2><Combobox label="Ubicazione" placeholder="Cerca per codice o nome…" query={locationQuery} onQueryChange={setLocationQuery} loading={locationSearching} options={locationOptions.map((location) => ({ id: location.id, label: `${location.code} · ${location.name}` }))} selectedLabel={locations.find((location) => location.id === defaultLocationId) ? `${locations.find((location) => location.id === defaultLocationId)!.code} · ${locations.find((location) => location.id === defaultLocationId)!.name}` : undefined} extraOption={{ id: '__new', label: '+ Nuova ubicazione' }} total={tendinaUbicazioni.totale} loadingMore={tendinaUbicazioni.caricandoAltre} onLoadMore={tendinaUbicazioni.caricaAltre} onSelect={(id) => id === '__new' ? setShowLocation(true) : chooseDefaultLocation(id)} hint="Vale per i prossimi pezzi; quelli già acquisiti conservano la propria ubicazione."/></section>}
     {vedi(3) && <>
     {proposalNotices.length > 0 && <section role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900"><div className="flex flex-wrap items-start justify-between gap-3"><h2 className="font-semibold">Da sapere sulle righe applicate</h2><Button type="button" variant="ghost" onClick={() => setProposalNotices([])}>Ho capito</Button></div><ul className="list-disc pl-5 text-sm">{proposalNotices.map((notice) => <li key={notice}>{notice}</li>)}</ul></section>}
     <section className="space-y-5"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">3. Righe e acquisizione</h2><Button type="button" variant="secondary" onClick={() => setLines((old) => [...old, freshLine()])}>+ Aggiungi riga</Button></div>
       <LabelCapture templates={templates} addedSignal={labelAdded}
-        catalogQuery={catalogQuery} onCatalogQuery={setCatalogQuery} catalogOptions={catalogOptions} catalogSearching={catalogSearching}
+        catalogQuery={catalogQuery} onCatalogQuery={setCatalogQuery} catalogOptions={catalogOptions} catalogSearching={catalogSearching} catalogTotal={tendinaCatalogo.totale} catalogLoadingMore={tendinaCatalogo.caricandoAltre} onCatalogLoadMore={tendinaCatalogo.caricaAltre}
         disabled={!defaultLocationId}
         disabledReason={!defaultLocationId ? 'Scegli prima l\'ubicazione predefinita nella sezione 2: è lì che finiranno i pezzi.' : undefined}
         onAdd={async (reading) => reading.item ? addFromLabel(reading, reading.item.id) : { ok: false as const, motivo: 'Il modello letto non è a catalogo: crealo prima.' }}
-        onCreateItem={setLabelReading}/>{lines.map((line, index) => <ReceiveLineCard key={line.key} line={line} index={index} removable={!line.lineId && lines.length > 1} onRemove={() => setLines((old) => old.filter((v) => v.key !== line.key))} onChange={(change) => updateLine(line.key, change)} onSelectItem={(id) => selectItem(line.key, id)} catalogQuery={catalogQuery} onCatalogQuery={setCatalogQuery} catalogOptions={catalogOptions} catalogSearching={catalogSearching} locations={locations} defaultLocationId={defaultLocationId} templates={templates} onExtract={(result) => void recognizeItem(line.key, result)} onApplyExtracted={(values) => addExtracted(line.key, values)}/>)}</section>{unassigned.length > 0 && <section className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Seriali letti ma non assegnati</h2><p className="text-sm">{serializedLines.length > 0 ? 'Assegna ogni seriale a una riga oppure scartalo esplicitamente dalla proposta.' : 'Non c’è ancora nessuna riga con un articolo serializzato a cui assegnarli.'}</p></div><Button type="button" variant="ghost" onClick={() => setUnassigned([])}>Scarta tutti</Button></div>
+        onCreateItem={setLabelReading}/>{lines.map((line, index) => <ReceiveLineCard key={line.key} line={line} index={index} removable={!line.lineId && lines.length > 1} onRemove={() => setLines((old) => old.filter((v) => v.key !== line.key))} onChange={(change) => updateLine(line.key, change)} onSelectItem={(id) => selectItem(line.key, id)} catalogQuery={catalogQuery} onCatalogQuery={setCatalogQuery} catalogOptions={catalogOptions} catalogSearching={catalogSearching} catalogTotal={tendinaCatalogo.totale} catalogLoadingMore={tendinaCatalogo.caricandoAltre} onCatalogLoadMore={tendinaCatalogo.caricaAltre} locations={locations} defaultLocationId={defaultLocationId} templates={templates} onExtract={(result) => void recognizeItem(line.key, result)} onApplyExtracted={(values) => addExtracted(line.key, values)}/>)}</section>{unassigned.length > 0 && <section className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Seriali letti ma non assegnati</h2><p className="text-sm">{serializedLines.length > 0 ? 'Assegna ogni seriale a una riga oppure scartalo esplicitamente dalla proposta.' : 'Non c’è ancora nessuna riga con un articolo serializzato a cui assegnarli.'}</p></div><Button type="button" variant="ghost" onClick={() => setUnassigned([])}>Scarta tutti</Button></div>
       {/* Senza righe serializzate ogni tendina sarebbe vuota e ogni pulsante
           "Assegna" un vicolo cieco: meglio dire cosa manca e mostrare i seriali
           in forma compatta, invece di una lista di comandi che non fanno nulla. */}

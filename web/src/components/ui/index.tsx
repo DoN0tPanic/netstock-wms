@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type SelectHTMLAttributes } from 'react';
+import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type SelectHTMLAttributes, type UIEvent } from 'react';
 import { Eye, EyeOff, Loader2, X } from 'lucide-react';
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' ');
@@ -34,16 +34,42 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> { l
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(({ label, error, id, children, className, ...props }, ref) => { const inputId = id ?? props.name; return <label className="block text-sm font-medium text-slate-700" htmlFor={inputId}>{label && <span className="mb-1 block">{label}</span>}<select ref={ref} id={inputId} className={join('min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2', className)} {...props}>{children}</select>{error && <span className="mt-1 block text-sm text-red-700">{error}</span>}</label>; });
 Select.displayName = 'Select';
 export interface ComboboxOption { id: string; label: string; sublabel?: string }
-export function Combobox({ label, placeholder, query, onQueryChange, options, loading, onSelect, selectedLabel, extraOption, disabled, hint }: { label?: string; placeholder?: string; query: string; onQueryChange: (value: string) => void; options: ComboboxOption[]; loading?: boolean; onSelect: (id: string) => void; selectedLabel?: string; extraOption?: { id: string; label: string }; disabled?: boolean; hint?: string }) {
+/** Campo con tendina di ricerca.
+ *
+ * L'elenco non è tutto quello che esiste: arriva a pagine dal server. Il piede
+ * dice sempre quante voci si stanno vedendo su quante ce ne sono, e scorrendo
+ * fino in fondo arrivano le successive — prima si vedevano le prime otto e non
+ * c'era modo di sapere che fossero otto su trecento, né di raggiungere le altre.
+ */
+export function Combobox({ label, placeholder, query, onQueryChange, options, loading, onSelect, selectedLabel, extraOption, disabled, hint, total, loadingMore, onLoadMore }: { label?: string; placeholder?: string; query: string; onQueryChange: (value: string) => void; options: ComboboxOption[]; loading?: boolean; onSelect: (id: string) => void; selectedLabel?: string; extraOption?: { id: string; label: string }; disabled?: boolean; hint?: string; total?: number; loadingMore?: boolean; onLoadMore?: () => void }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const allOptions = extraOption ? [...options, extraOption] : options;
+  const mancanti = total !== undefined ? Math.max(0, total - options.length) : 0;
   useEffect(() => setActive(0), [options.length, extraOption?.id]);
+  // Se il pannello non arriva a riempirsi (poche voci, schermo alto) non c'è
+  // barra da scorrere e le pagine successive non arriverebbero mai.
+  const listaRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const lista = listaRef.current;
+    if (!open || !lista || !mancanti || loading || loadingMore) return;
+    if (lista.scrollHeight <= lista.clientHeight) onLoadMore?.();
+  }, [open, mancanti, loading, loadingMore, options.length, onLoadMore]);
+  const alloScorrimento = (event: UIEvent<HTMLDivElement>) => {
+    const lista = event.currentTarget;
+    if (lista.scrollTop + lista.clientHeight >= lista.scrollHeight - 48) onLoadMore?.();
+  };
   const choose = (id: string) => { onQueryChange(''); setOpen(false); onSelect(id); };
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') { setOpen(false); return; }
     if (!open || !allOptions.length) return;
-    if (event.key === 'ArrowDown') { event.preventDefault(); setActive((current) => (current + 1) % allOptions.length); }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      // Chi naviga da tastiera arriva in fondo senza toccare la barra: qui la
+      // pagina successiva la chiede la freccia.
+      if (active >= allOptions.length - 1 && mancanti) onLoadMore?.();
+      setActive((current) => (current + 1) % allOptions.length);
+    }
     if (event.key === 'ArrowUp') { event.preventDefault(); setActive((current) => (current - 1 + allOptions.length) % allOptions.length); }
     if (event.key === 'Enter') { event.preventDefault(); const option = allOptions[active]; if (option) choose(option.id); }
   };
@@ -54,7 +80,7 @@ export function Combobox({ label, placeholder, query, onQueryChange, options, lo
     </label>
     {selectedLabel && !query && <p className="mt-1 text-xs text-slate-600">Selezionato: <span className="font-medium">{selectedLabel}</span></p>}
     {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
-    {open && !disabled && <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-lg border bg-white py-1 shadow-xl" role="listbox">
+    {open && !disabled && <div ref={listaRef} onScroll={alloScorrimento} className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-auto rounded-lg border bg-white py-1 shadow-xl" role="listbox">
       {loading && <p className="px-3 py-2 text-sm text-slate-500">Ricerca…</p>}
       {!loading && !options.length && <p className="px-3 py-2 text-sm text-slate-500">Nessun risultato.</p>}
       {options.map((option, index) => <button type="button" key={option.id} role="option" aria-selected={index === active} className={join('block w-full px-3 py-2 text-left text-sm', index === active ? 'bg-blue-50' : 'hover:bg-slate-50')} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option.id)} onMouseEnter={() => setActive(index)}>
@@ -62,6 +88,10 @@ export function Combobox({ label, placeholder, query, onQueryChange, options, lo
         {option.sublabel && <span className="block text-xs text-slate-500">{option.sublabel}</span>}
       </button>)}
       {extraOption && <button type="button" className={join('block w-full border-t px-3 py-2 text-left text-sm font-medium text-blue-700', active === options.length ? 'bg-blue-50' : 'hover:bg-slate-50')} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(extraOption.id)} onMouseEnter={() => setActive(options.length)}>{extraOption.label}</button>}
+      {loadingMore && <p className="px-3 py-2 text-sm text-slate-500">Carico altre voci…</p>}
+      {total !== undefined && options.length > 0 && !loading && <p className="border-t px-3 py-2 text-xs text-slate-500">
+        {mancanti ? `${options.length} di ${total} · scorri per vedere le altre` : `${total} ${total === 1 ? 'voce' : 'voci'} in tutto`}
+      </p>}
     </div>}
   </div>;
 }

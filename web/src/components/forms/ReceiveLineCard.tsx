@@ -30,7 +30,7 @@ const conditions: ItemCondition[] = ['new', 'refurbished', 'used', 'faulty'];
  */
 export function ReceiveLineCard({
   line, index, removable, onRemove, onChange, onSelectItem,
-  catalogQuery, onCatalogQuery, catalogOptions, catalogSearching,
+  catalogQuery, onCatalogQuery, catalogOptions, catalogSearching, catalogTotal, catalogLoadingMore, onCatalogLoadMore,
   locations, defaultLocationId, templates, onExtract, onApplyExtracted,
 }: {
   line: ReceiveLine;
@@ -43,6 +43,10 @@ export function ReceiveLineCard({
   onCatalogQuery: (value: string) => void;
   catalogOptions: CatalogItem[];
   catalogSearching: boolean;
+  /** Quanti articoli corrispondono in tutto, e come chiedere i successivi. */
+  catalogTotal?: number;
+  catalogLoadingMore?: boolean;
+  onCatalogLoadMore?: () => void;
   locations: Location[];
   defaultLocationId: string;
   templates: ExtractionTemplate[];
@@ -89,6 +93,7 @@ export function ReceiveLineCard({
         <Combobox
           label="Modello" placeholder="Cerca per part number o nome…"
           query={catalogQuery} onQueryChange={onCatalogQuery} loading={catalogSearching}
+          total={catalogTotal} loadingMore={catalogLoadingMore} onLoadMore={onCatalogLoadMore}
           options={catalogOptions.map((item) => ({ id: item.id, label: `${item.part_number} · ${item.name}` }))}
           selectedLabel={line.item ? `${line.item.part_number} · ${line.item.name}` : undefined}
           extraOption={{ id: '__new', label: '+ Nuovo articolo' }}

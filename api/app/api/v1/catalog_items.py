@@ -49,8 +49,17 @@ async def list_catalog_items(
     total = (
         await db.execute(select(func.count()).select_from(CatalogItem).where(*filters))
     ).scalar_one()
+    # Ordine alfabetico, con l'id a rompere la parità: senza un ORDER BY
+    # completo PostgreSQL restituisce le righe nell'ordine fisico della
+    # tabella, che cambia a ogni modifica — bastava correggere il nome di un
+    # articolo perché un altro sparisse dai primi risultati della tendina, e
+    # con le pagine successive si vedeva due volte la stessa riga.
     stmt = (
-        select(CatalogItem).where(*filters).offset((page - 1) * page_size).limit(page_size)
+        select(CatalogItem)
+        .where(*filters)
+        .order_by(CatalogItem.part_number, CatalogItem.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     items = (await db.execute(stmt)).scalars().all()
     return Page(items=list(items), total=total, page=page, page_size=page_size)

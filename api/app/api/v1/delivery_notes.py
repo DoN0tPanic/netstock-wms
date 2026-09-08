@@ -61,7 +61,9 @@ async def list_delivery_notes(
     stmt = (
         select(DeliveryNote)
         .where(*filters)
-        .order_by(DeliveryNote.note_date.desc())
+        # Il numero rompe la parità: senza, due bolle con la stessa data si
+        # scambiavano di posto fra una pagina e l'altra.
+        .order_by(DeliveryNote.note_date.desc(), DeliveryNote.number.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )

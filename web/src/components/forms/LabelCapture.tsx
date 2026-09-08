@@ -39,13 +39,17 @@ const valueOf = (fields: Record<string, { value: string }>, ...names: string[]) 
  */
 export function LabelCapture({
   templates, disabled, disabledReason, onAdd, onCreateItem, addedSignal = 0,
-  catalogQuery, onCatalogQuery, catalogOptions, catalogSearching,
+  catalogQuery, onCatalogQuery, catalogOptions, catalogSearching, catalogTotal, catalogLoadingMore, onCatalogLoadMore,
 }: {
   templates: ExtractionTemplate[];
   catalogQuery: string;
   onCatalogQuery: (value: string) => void;
   catalogOptions: CatalogItem[];
   catalogSearching: boolean;
+  /** Quanti articoli corrispondono in tutto, e come chiedere i successivi. */
+  catalogTotal?: number;
+  catalogLoadingMore?: boolean;
+  onCatalogLoadMore?: () => void;
   disabled?: boolean;
   disabledReason?: string;
   /** Cresce quando il pezzo è stato aggiunto dal genitore — succede dopo aver
@@ -175,6 +179,7 @@ export function LabelCapture({
           {!letto.item && (
             <Combobox label="Modello" placeholder="Cerca per part number o nome…"
               query={catalogQuery} onQueryChange={onCatalogQuery} loading={catalogSearching}
+          total={catalogTotal} loadingMore={catalogLoadingMore} onLoadMore={onCatalogLoadMore}
               options={catalogOptions.map((item) => ({ id: item.id, label: `${item.part_number} · ${item.name}` }))}
               onSelect={(id) => { const scelto = catalogOptions.find((item) => item.id === id); if (scelto) setLetto({ ...letto, item: { id: scelto.id, part_number: scelto.part_number, name: scelto.name }, part_number: scelto.part_number }); }}
               hint="Scansionando il barcode il modello non si sa: scegli il primo, poi resta per i successivi."/>
