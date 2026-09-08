@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react-swc';
 
+// `process` qui non è tipizzato: @types/node non è fra le dipendenze e non
+// vale aggiungerlo per una riga di configurazione che serve solo in sviluppo.
+declare const process: { env: Record<string, string | undefined> };
+
 export default defineConfig({
   plugins: [react()],
   // In sviluppo l'API può stare altrove: un'istanza di prova su un altro
