@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbSession, require_role
 from app.exceptions import NotFoundError, ValidationAppError
+from app.models.catalog import CatalogItem
 from app.models.delivery import DeliveryNote, DeliveryNoteLine
 from app.models.enums import UserRole
 from app.models.movements import StockMovement
@@ -28,6 +29,35 @@ from app.services.audit import write_audit
 from app.services.receiving import ReceiveLine, SerialInput, receive_delivery_note
 
 router = APIRouter(prefix="/delivery-notes", tags=["delivery-notes"])
+
+
+async def _decora_righe(db: DbSession, note: DeliveryNote) -> DeliveryNote:
+    """Scrive sulle righe il modello per esteso, non solo il suo identificativo.
+
+    Una sola interrogazione per gli articoli citati dalla bolla. Prima lo
+    faceva il browser scaricando l'intero catalogo: su ottomila articoli sono
+    quarantuno richieste in fila per tradurre tre righe.
+    """
+    righe = list(note.lines or [])
+    if not righe:
+        return note
+    articoli = {
+        voce.id: voce
+        for voce in (
+            await db.execute(
+                select(CatalogItem).where(
+                    CatalogItem.id.in_({riga.catalog_item_id for riga in righe})
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    for riga in righe:
+        articolo = articoli.get(riga.catalog_item_id)
+        riga.part_number = articolo.part_number if articolo else None
+        riga.catalog_item_name = articolo.name if articolo else None
+    return note
 
 
 @router.get("", response_model=Page[DeliveryNoteResponse])
@@ -117,7 +147,7 @@ async def create_delivery_note(
         .options(selectinload(DeliveryNote.lines))
         .where(DeliveryNote.id == note.id)
     )
-    return result.scalar_one()
+    return await _decora_righe(db, result.scalar_one())
 
 
 @router.get("/{note_id}", response_model=DeliveryNoteDetailResponse)
@@ -130,7 +160,7 @@ async def get_delivery_note(note_id: uuid.UUID, db: DbSession, user: CurrentUser
     note = result.scalar_one_or_none()
     if note is None:
         raise NotFoundError("Bolla non trovata.", details={"id": str(note_id)})
-    return note
+    return await _decora_righe(db, note)
 
 
 @router.patch("/{note_id}", response_model=DeliveryNoteDetailResponse)
@@ -165,7 +195,7 @@ async def update_delivery_note(
         .options(selectinload(DeliveryNote.lines))
         .where(DeliveryNote.id == note.id)
     )
-    return result.scalar_one()
+    return await _decora_righe(db, result.scalar_one())
 
 
 @router.post("/{note_id}/lines", response_model=DeliveryNoteLineResponse, status_code=201)

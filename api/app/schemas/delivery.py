@@ -45,6 +45,11 @@ class DeliveryNoteLineResponse(OrmModel):
     qty_received: Decimal
     condition: ItemCondition
     notes: str | None
+    # Il modello scritto per esteso, non solo il suo identificativo: senza,
+    # la scheda della bolla scaricava l'intero catalogo — quarantuno richieste
+    # su ottomila articoli — per tradurre tre righe.
+    part_number: str | None = None
+    catalog_item_name: str | None = None
 
 
 class DeliveryNoteResponse(OrmModel):

@@ -7,7 +7,6 @@ import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, 
 import { catalogApi, categoriesApi, deliveryNotesApi, exportApi, inventoryApi, locationsApi, movementsApi, suppliersApi, unitsApi, vendorsApi } from "../api";
 import {
   useCategories,
-  useCatalog,
   useDashboard,
   useDeliveryNotes,
   useInventory,
@@ -17,6 +16,7 @@ import {
   useVendors,
 } from "../api/queries";
 import { useTendinaPaginata } from "../api/tendina";
+import { useElencoPaginato, type ElencoPaginato } from "../api/elencoPaginato";
 import { COLONNE_MAGAZZINO, COLONNE_PREDEFINITE, leggiColonne, scriviColonne, type ColonnaMagazzino } from "./inventoryColumns";
 import { percorsoUbicazione } from "../lib/locations";
 import { SceltaMultipla } from "../components/SceltaMultipla";
@@ -839,7 +839,6 @@ export function DeliveryNotes() {
 }
 export function DeliveryNoteDetail() {
   const { id = "" } = useParams();
-  const catalog = useCatalog();
   const locations = useLocations();
   const query = useQuery({
     queryKey: ["delivery-note", id],
@@ -862,7 +861,9 @@ export function DeliveryNoteDetail() {
           {
             key: "item",
             label: "Modello",
-            render: (row) => { const item = catalog.data?.items.find((candidate) => candidate.id === row.catalog_item_id); return item ? <><strong>{item.part_number}</strong><div className="text-xs text-slate-500">{item.name}</div></> : "—"; },
+            // Il modello arriva già scritto sulla riga: prima questa colonna
+            // costava l'intero catalogo scaricato nel browser.
+            render: (row) => row.part_number ? <><strong>{row.part_number}</strong><div className="text-xs text-slate-500">{row.catalog_item_name}</div></> : "—",
           },
           {
             key: "expected",
@@ -1014,7 +1015,7 @@ export function Movements() {
   );
 }
 export function Catalog() {
-  const query = useCatalog();
+  const elenco = useElencoPaginato<CatalogItem>("catalog", (parametri) => catalogApi.list(parametri));
   const queryClient = useQueryClient();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
@@ -1026,7 +1027,8 @@ export function Catalog() {
       title="Catalogo"
       description="I modelli che puoi ricevere a magazzino"
       empty="Nessun articolo nel catalogo. Crea il primo articolo per iniziare."
-      query={query}
+      elenco={elenco}
+      cercaCon="part number o nome…"
       onNew={() => setCreating(true)}
       newLabel="Nuovo articolo"
       onEdit={(row) => setEditing(row)}
@@ -1051,7 +1053,7 @@ export function Catalog() {
 }
 const locationTypeLabels: Record<LocationType, string> = { warehouse: "Magazzino", shelf: "Scaffale", box: "Contenitore", remote_site: "Sede remota", transit: "In transito" };
 export function Locations() {
-  const query = useLocations();
+  const elenco = useElencoPaginato<Location>("locations", (parametri) => locationsApi.list(parametri));
   const queryClient = useQueryClient();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
@@ -1084,7 +1086,8 @@ export function Locations() {
       title="Ubicazioni"
       description="Dove si trova la merce: magazzini, scaffali, sedi, persone"
       empty="Nessuna ubicazione configurata. Crea il magazzino e i suoi scaffali."
-      query={query}
+      elenco={elenco}
+      cercaCon="codice o nome…"
       onNew={() => setCreating(true)}
       newLabel="Nuova ubicazione"
       onEdit={openEditor}
@@ -1169,7 +1172,7 @@ function useDeleteEntry<T extends { id: string }>(
   return { ask: setTarget, dialog };
 }
 export function Vendors() {
-  const query = useVendors();
+  const elenco = useElencoPaginato<Vendor>("vendors", (parametri) => vendorsApi.list(parametri));
   const queryClient = useQueryClient();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
@@ -1197,7 +1200,8 @@ export function Vendors() {
       title="Vendor"
       description="I produttori degli apparati a catalogo (Cisco, Meraki, ...)"
       empty="Nessun vendor registrato. Creane uno prima di aggiungere un articolo a catalogo."
-      query={query}
+      elenco={elenco}
+      cercaCon="codice o nome del costruttore…"
       onNew={() => setCreating(true)}
       newLabel="Nuovo vendor"
       onEdit={openEditor}
@@ -1225,7 +1229,12 @@ export function Vendors() {
   );
 }
 export function Categories() {
-  const query = useCategories();
+  const elenco = useElencoPaginato<Category>("categories", (parametri) => categoriesApi.list(parametri));
+  // La tabella si sfoglia, ma il padre di una categoria può stare su
+  // un'altra pagina: per il nome del padre e per la tendina che lo sceglie
+  // serve l'elenco intero. Le categorie sono una tassonomia, non un
+  // magazzino: restano poche per natura.
+  const tutte = useCategories();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
@@ -1244,13 +1253,14 @@ export function Categories() {
     finally { setBusy(false); }
   };
   const remove = useDeleteEntry<Category>(categoriesApi, "categories", (row) => row.code);
-  const nameOf = (id: string | null) => query.data?.items.find((row) => row.id === id)?.name ?? "\u2014";
+  const nameOf = (id: string | null) => tutte.data?.items.find((row) => row.id === id)?.name ?? "\u2014";
   return (
     <MasterPage
       title="Categorie"
       description="Come raggruppi gli articoli: switch, access point, transceiver, ..."
       empty="Nessuna categoria registrata. Creane una prima di aggiungere un articolo a catalogo."
-      query={query}
+      elenco={elenco}
+      cercaCon="codice o nome della categoria…"
       onNew={() => setCreating(true)}
       newLabel="Nuova categoria"
       onDelete={remove.ask}
@@ -1267,7 +1277,7 @@ export function Categories() {
             <Input label="Codice" required autoFocus hint="Es. SWITCH" value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })}/>
             <Input label="Nome" required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}/>
           </div>
-          <Select label="Categoria padre (opzionale)" value={draft.parent_id} onChange={(e) => setDraft({ ...draft, parent_id: e.target.value })}><option value="">Nessuna</option>{(query.data?.items ?? []).map((row) => <option key={row.id} value={row.id}>{row.code} \u00b7 {row.name}</option>)}</Select>
+          <Select label="Categoria padre (opzionale)" value={draft.parent_id} onChange={(e) => setDraft({ ...draft, parent_id: e.target.value })}><option value="">Nessuna</option>{(tutte.data?.items ?? []).map((row) => <option key={row.id} value={row.id}>{row.code} \u00b7 {row.name}</option>)}</Select>
           <div className="flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setCreating(false)}>Annulla</Button><Button loading={busy} disabled={!draft.code.trim() || !draft.name.trim()} onClick={() => void create()}>Crea categoria</Button></div>
         </div>
       </Modal>
@@ -1275,7 +1285,7 @@ export function Categories() {
   );
 }
 export function Suppliers() {
-  const query = useSuppliers();
+  const elenco = useElencoPaginato<Supplier>("suppliers", (parametri) => suppliersApi.list(parametri));
   const queryClient = useQueryClient();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
@@ -1303,7 +1313,8 @@ export function Suppliers() {
       title="Fornitori"
       description="Chi ti consegna la merce"
       empty="Nessun fornitore registrato. Aggiungine uno prima di creare una bolla."
-      query={query}
+      elenco={elenco}
+      cercaCon="nome del fornitore…"
       onNew={() => setCreating(true)}
       newLabel="Nuovo fornitore"
       onEdit={openEditor}
@@ -1333,7 +1344,8 @@ function MasterPage<T extends { id: string; is_active?: boolean }>({
   title,
   description,
   empty,
-  query,
+  elenco,
+  cercaCon,
   columns,
   onNew,
   newLabel = "Nuovo",
@@ -1345,7 +1357,9 @@ function MasterPage<T extends { id: string; is_active?: boolean }>({
   title: string;
   description?: string;
   empty: string;
-  query: { isLoading: boolean; isError: boolean; data?: { items: T[] } };
+  elenco: ElencoPaginato<T>;
+  /** Cosa si può scrivere nel campo di ricerca, detto a chi lo guarda. */
+  cercaCon: string;
   columns: Array<{
     key: string;
     label: string;
@@ -1359,6 +1373,8 @@ function MasterPage<T extends { id: string; is_active?: boolean }>({
   children?: React.ReactNode;
 }) {
   const { session } = useAuth();
+  const { query, testo, setTesto, pagina, vaiAPagina } = elenco;
+  const pagine = query.data ? Math.max(1, Math.ceil(query.data.total / query.data.page_size)) : 1;
   // Retiring an entry is a shared concern of every registry page, so the
   // button lives here rather than being re-implemented (and drifting) in each.
   const canWrite = can(session?.role, "manage_master_data");
@@ -1370,6 +1386,12 @@ function MasterPage<T extends { id: string; is_active?: boolean }>({
   ];
   return (
     <Page title={title} description={description} actions={onNew && canWrite ? <Button onClick={onNew}><Plus size={18}/>{newLabel}</Button> : undefined}>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-64 flex-1 sm:max-w-sm">
+          <Input label="Cerca" placeholder={cercaCon} value={testo} onChange={(event) => setTesto(event.target.value)} autoComplete="off"/>
+        </div>
+        {query.data && <span className="pb-3 text-sm text-slate-600">{query.data.total.toLocaleString("it-IT")} {query.data.total === 1 ? "voce" : "voci"}{testo ? " trovate" : ""}</span>}
+      </div>
       {query.isLoading ? (
         <Loading />
       ) : query.isError || !query.data ? (
@@ -1378,9 +1400,16 @@ function MasterPage<T extends { id: string; is_active?: boolean }>({
         <Table
           rows={query.data.items}
           keyOf={(row) => row.id}
-          empty={empty}
+          empty={testo ? `Nessun risultato per «${testo}».` : empty}
           columns={allColumns}
         />
+      )}
+      {query.data && query.data.total > query.data.page_size && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="secondary" disabled={pagina <= 1} onClick={() => vaiAPagina(pagina - 1)}>Precedente</Button>
+          <span className="text-sm">Pagina {pagina} di {pagine.toLocaleString("it-IT")}</span>
+          <Button variant="secondary" disabled={pagina >= pagine} onClick={() => vaiAPagina(pagina + 1)}>Successiva</Button>
+        </div>
       )}
       {children}
     </Page>
