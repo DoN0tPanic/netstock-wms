@@ -238,7 +238,9 @@ L'installatore propone un timer systemd che alle 02:30 copia il database; su un'
 Due cose che rendono quelle copie una garanzia invece di un proposito:
 
 - **Fuori dalla macchina.** Imposta `BACKUP_REMOTE` in `.env` (un percorso montato o un bersaglio rsync). Senza, la sola copia dei dati sta sullo stesso disco del database che dovrebbe proteggere: basta contro un errore, non contro un disco che muore. Se la copia remota non riesce, il backup risulta **fallito** — perché un fallimento silenzioso si scopre il giorno peggiore.
-- **Riaperte ogni tanto.** La domenica il dump appena fatto viene ripristinato in un database usa e getta e le righe si contano (`BACKUP_RESTORE_TEST=0` per saltarlo). A comando: `make backup-verify`. Un backup mai ripristinato non è un backup, è un file di cui ci si fida.
+- **Riaperte ogni tanto.** Ogni sette giorni il dump appena fatto viene ripristinato in un database usa e getta e le righe si contano (`BACKUP_RESTORE_TEST=0` per saltarlo, `BACKUP_RESTORE_TEST_DAYS` per cambiare il ritmo). A comando: `make backup-verify`. Un backup mai ripristinato non è un backup, è un file di cui ci si fida.
+
+  «Ogni sette giorni», non «di domenica»: si guarda quanto tempo è passato dall'ultima prova riuscita, così una macchina spenta nel fine settimana la rifà al primo avvio utile invece di saltare la settimana. Il backup in sé lo recupera già il timer (`Persistent=true`).
 
 ```bash
 systemctl status netstock-backup     # esito dell'ultimo backup

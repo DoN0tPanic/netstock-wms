@@ -28,7 +28,14 @@ if [ ! -f "$DUMP_FILE" ]; then
   exit 1
 fi
 
+# Le variabili passate a riga di comando vincono su quelle del file. Senza
+# questo `source` le sovrascrive in silenzio, e un comando che la
+# documentazione dichiara — `BACKUP_RESTORE_TEST=0 ./scripts/backup.sh` —
+# non ha nessun effetto se quella riga esiste anche in `.env`. Trovato
+# provando l'interruttore, non leggendolo.
+DA_RIGA_DI_COMANDO="$(export -p)"
 source "$REPO_DIR/.env"
+eval "$DA_RIGA_DI_COMANDO"
 
 # L'indice del dump serve a chi sta decidendo se ripristinarlo. Nella prova
 # automatica settimanale sarebbe solo rumore nel journal, ogni domenica.
