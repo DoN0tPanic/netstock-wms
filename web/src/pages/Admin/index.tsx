@@ -249,9 +249,14 @@ function TemplateEditor({ open, template, vendors, categories, onClose, onSaved 
   </div></Modal>;
 }
 export function AuditAdmin() {
+  // Senza paginatore si vedevano gli ultimi cinquanta eventi e basta: in un
+  // registro che per progetto non si può cancellare, e che dopo un anno di
+  // lavoro conta centinaia di migliaia di righe, tutto il resto era lì e
+  // irraggiungibile. Un registro che non si può sfogliare non è un registro.
+  const [pagina, setPagina] = useState(1);
   const query = useQuery({
-    queryKey: ["audit"],
-    queryFn: () => adminApi.audit(),
+    queryKey: ["audit", pagina],
+    queryFn: () => adminApi.audit({ page: pagina, page_size: 50 }),
   });
   return (
     <Page title="Audit log" description="Registro immutabile delle operazioni">
@@ -283,6 +288,16 @@ export function AuditAdmin() {
             },
           ]}
         />
+      )}
+      {query.data && query.data.total > query.data.page_size && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm text-slate-600">{query.data.total.toLocaleString("it-IT")} eventi registrati</span>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>Precedente</Button>
+            <span className="text-sm">Pagina {pagina} di {Math.max(1, Math.ceil(query.data.total / query.data.page_size))}</span>
+            <Button variant="secondary" disabled={pagina * query.data.page_size >= query.data.total} onClick={() => setPagina(pagina + 1)}>Successiva</Button>
+          </div>
+        </div>
       )}
     </Page>
   );

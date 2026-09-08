@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -100,6 +101,31 @@ async def list_movements(
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 
+# asyncpg non accetta più di 32767 parametri in una sola istruzione: è un
+# limite del protocollo di PostgreSQL, non una scelta della libreria. Una
+# pagina di movimenti non ci arriva neanche vicino, ma l'esportazione completa
+# decora *tutti* i movimenti in una volta: con più di trentaduemila pezzi
+# distinti nello storico, l'archivio completo smetteva di scaricarsi — e non
+# con un messaggio, con un errore 500. Lo scaglione tiene le istruzioni sotto
+# il limite senza che chi chiama debba saperlo.
+_MASSIMO_PARAMETRI = 20_000
+
+
+async def _mappa_a_scaglioni(
+    db: DbSession, colonna_id: Any, colonna_valore: Any, identificativi: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, Any]:
+    """Da identificativi a valori, in istruzioni abbastanza piccole da girare."""
+    elenco = list(identificativi)
+    risultato: dict[uuid.UUID, Any] = {}
+    for inizio in range(0, len(elenco), _MASSIMO_PARAMETRI):
+        scaglione = elenco[inizio : inizio + _MASSIMO_PARAMETRI]
+        righe = await db.execute(
+            select(colonna_id, colonna_valore).where(colonna_id.in_(scaglione))
+        )
+        risultato.update(dict(righe.all()))
+    return risultato
+
+
 async def _decorate_movements(db: DbSession, movements: list[StockMovement]) -> None:
     """Attach human-readable labels to a page of movements.
 
@@ -118,48 +144,26 @@ async def _decorate_movements(db: DbSession, movements: list[StockMovement]) -> 
     user_ids = {m.performed_by for m in movements}
     movement_ids = {m.id for m in movements}
 
-    part_numbers = dict(
-        (
-            await db.execute(
-                select(CatalogItem.id, CatalogItem.part_number).where(CatalogItem.id.in_(item_ids))
-            )
-        ).all()
+    part_numbers = await _mappa_a_scaglioni(
+        db, CatalogItem.id, CatalogItem.part_number, item_ids
     )
-    serials = (
-        dict(
-            (
+    serials = await _mappa_a_scaglioni(db, StockUnit.id, StockUnit.serial_number, unit_ids)
+    location_codes = await _mappa_a_scaglioni(db, Location.id, Location.code, location_ids)
+    usernames = await _mappa_a_scaglioni(db, User.id, User.username, user_ids)
+    reversed_ids: set[uuid.UUID] = set()
+    elenco_movimenti = list(movement_ids)
+    for inizio in range(0, len(elenco_movimenti), _MASSIMO_PARAMETRI):
+        scaglione = elenco_movimenti[inizio : inizio + _MASSIMO_PARAMETRI]
+        reversed_ids.update(
+            row[0]
+            for row in (
                 await db.execute(
-                    select(StockUnit.id, StockUnit.serial_number).where(StockUnit.id.in_(unit_ids))
+                    select(StockMovement.reverses_id).where(
+                        StockMovement.reverses_id.in_(scaglione)
+                    )
                 )
             ).all()
         )
-        if unit_ids
-        else {}
-    )
-    location_codes = (
-        dict(
-            (
-                await db.execute(
-                    select(Location.id, Location.code).where(Location.id.in_(location_ids))
-                )
-            ).all()
-        )
-        if location_ids
-        else {}
-    )
-    usernames = dict(
-        (await db.execute(select(User.id, User.username).where(User.id.in_(user_ids)))).all()
-    )
-    reversed_ids = {
-        row[0]
-        for row in (
-            await db.execute(
-                select(StockMovement.reverses_id).where(
-                    StockMovement.reverses_id.in_(movement_ids)
-                )
-            )
-        ).all()
-    }
 
     for movement in movements:
         movement.part_number = part_numbers.get(movement.catalog_item_id)

@@ -15,8 +15,37 @@ from app.services.csv_export import CONDITION_LABELS, UNIT_STATUS_LABELS, csv_re
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
-_COMBINED_CTE = """
-    WITH combined AS (
+# Il saldo degli sfusi, calcolato qui invece che da `v_stock_balance`, per una
+# ragione sola: la vista somma **tutti** i movimenti, compresi quelli dei pezzi
+# serializzati, che la riga dopo vengono buttati via dal join su
+# `is_serialized = FALSE`. In un magazzino di apparati di rete i movimenti
+# serializzati sono la stragrande maggioranza, e questa pagina è quella che si
+# apre più spesso: escluderli prima della somma, invece che dopo, è la
+# differenza fra leggere una tabella intera a ogni apertura e leggerne un
+# pezzo. Il risultato è lo stesso, riga per riga.
+_SALDO_SFUSI = """
+    saldo_sfusi AS (
+        SELECT catalog_item_id, location_id, condition, sum(qty) AS quantity
+        FROM (
+            SELECT m.catalog_item_id, m.location_to_id AS location_id, m.condition,
+                   m.quantity AS qty
+            FROM stock_movements m
+            JOIN catalog_items ci ON ci.id = m.catalog_item_id AND ci.is_serialized = FALSE
+            WHERE m.location_to_id IS NOT NULL
+            UNION ALL
+            SELECT m.catalog_item_id, m.location_from_id, m.condition, -m.quantity
+            FROM stock_movements m
+            JOIN catalog_items ci ON ci.id = m.catalog_item_id AND ci.is_serialized = FALSE
+            WHERE m.location_from_id IS NOT NULL
+        ) righe
+        GROUP BY catalog_item_id, location_id, condition
+        HAVING sum(qty) <> 0
+    )
+"""
+
+_COMBINED_CTE = f"""
+    WITH {_SALDO_SFUSI.strip()},
+    combined AS (
         SELECT
             'unit' AS kind,
             su.id::text AS row_key,
@@ -75,8 +104,8 @@ _COMBINED_CTE = """
             ci.vendor_id,
             ci.category_id,
             NULL::uuid AS delivery_note_id
-        FROM v_stock_balance sb
-        JOIN catalog_items ci ON ci.id = sb.catalog_item_id AND ci.is_serialized = FALSE
+        FROM saldo_sfusi sb
+        JOIN catalog_items ci ON ci.id = sb.catalog_item_id
         JOIN vendors v ON v.id = ci.vendor_id
         JOIN categories c ON c.id = ci.category_id
         LEFT JOIN locations l ON l.id = sb.location_id
