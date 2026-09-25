@@ -857,10 +857,10 @@ export function DeliveryNoteDetail() {
   const [motivo, setMotivo] = useState("");
   const [busy, setBusy] = useState(false);
   const riapri = async () => {
-    if (motivo.trim().length < 10) return;
+    if (motivo.length < 1) return;
     setBusy(true);
     try {
-      await deliveryNotesApi.reopen(id, motivo.trim());
+      await deliveryNotesApi.reopen(id, motivo);
       toast.show("Bolla riaperta: ora puoi collegarle altra merce da Ricevi merce.", "success");
       setRiaprendo(false); setMotivo("");
       await queryClient.invalidateQueries({ queryKey: ["delivery-note", id] });
@@ -882,10 +882,10 @@ export function DeliveryNoteDetail() {
         <div className="space-y-3">
           <p className="text-sm text-slate-600">Una bolla si chiude da sola quando tutte le righe risultano complete. Riaprirla serve a collegarle altra merce — un secondo collo, o più pezzi di quanti ne dichiarava. Niente viene riscritto: la riapertura finisce nel registro di controllo con il tuo nome e questo motivo.</p>
           <Input label="Motivo della riapertura" autoFocus value={motivo} onChange={(event) => setMotivo(event.target.value)}
-            placeholder="Es. arrivato un secondo collo con la stessa bolla" hint="Almeno 10 caratteri."/>
+            placeholder="Es. arrivato un secondo collo con la stessa bolla" hint="Resta nel registro: scrivi quello che servirà a chi lo rileggerà."/>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" disabled={busy} onClick={() => setRiaprendo(false)}>Annulla</Button>
-            <Button loading={busy} disabled={motivo.trim().length < 10} onClick={() => void riapri()}>Riapri</Button>
+            <Button loading={busy} disabled={motivo.length < 1} onClick={() => void riapri()}>Riapri</Button>
           </div>
         </div>
       </Modal>

@@ -190,10 +190,10 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
     await idrataNota(value);
   };
   const riapriNota = async () => {
-    if (!daRiaprire || motivoRiapertura.trim().length < 10) return;
+    if (!daRiaprire || motivoRiapertura.length < 1) return;
     setBusy(true); setError('');
     try {
-      const riaperta = await deliveryNotesApi.reopen(daRiaprire.id, motivoRiapertura.trim());
+      const riaperta = await deliveryNotesApi.reopen(daRiaprire.id, motivoRiapertura);
       setNoteChiuse((old) => old.filter((nota) => nota.id !== riaperta.id));
       setNotes((old) => merge(old, [riaperta]));
       setDaRiaprire(null); setMotivoRiapertura('');
@@ -277,9 +277,9 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
       <p className="text-sm"><strong>La bolla {daRiaprire.number} è chiusa.</strong> Si è chiusa da sola quando tutte le righe risultavano complete. Per collegarci altra merce va riaperta: resta scritto nel registro chi l'ha fatto e perché.</p>
       <Input label="Motivo della riapertura" value={motivoRiapertura} onChange={(e) => setMotivoRiapertura(e.target.value)}
         placeholder="Es. arrivato un secondo collo con la stessa bolla"
-        hint="Almeno 10 caratteri."/>
+        hint="Resta nel registro: scrivi quello che servirà a chi lo rileggerà."/>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" loading={busy} disabled={motivoRiapertura.trim().length < 10} onClick={() => void riapriNota()}>Riapri e continua</Button>
+        <Button type="button" loading={busy} disabled={motivoRiapertura.length < 1} onClick={() => void riapriNota()}>Riapri e continua</Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => void chooseNote('')}>Annulla</Button>
       </div>
     </div>}{noteMode === 'none' && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">La merce viene registrata subito in giacenza. Potrai collegare il numero di bolla in un secondo momento dal dettaglio di ogni pezzo, quando sarà disponibile.</p>}{noteExtraction && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">Proposta caricata: {noteExtraction.lines.length} righe · motore {noteExtraction.engine} ({noteExtraction.duration_ms} ms). Controlla e modifica tutto prima di registrare.</p>}</section>

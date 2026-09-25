@@ -355,10 +355,15 @@ async def reopen_delivery_note(
         raise NotFoundError("Bolla non trovata.", details={"id": str(note_id)})
     if not note.is_closed:
         raise ValidationAppError("La bolla è già aperta: puoi aggiungere merce così com'è.")
-    if not payload.reason or len(payload.reason.strip()) < 10:
-        raise ValidationAppError(
-            "Indicare una motivazione di almeno 10 caratteri per la riapertura."
-        )
+    # Basta un carattere, spazio compreso — di proposito, e diversamente dalla
+    # chiusura manuale che ne pretende dieci. Chiudere una bolla incompleta è
+    # una decisione che qualcuno dovrà giustificare; riaprirla è il gesto
+    # normale di chi ha in mano il secondo collo, e un pedaggio di dieci
+    # caratteri a ogni collo si paga scrivendo "aaaaaaaaaa". Il campo resta
+    # obbligatorio perché la voce di registro abbia comunque un posto dove
+    # dire qualcosa, quando c'è qualcosa da dire.
+    if len(payload.reason) < 1:
+        raise ValidationAppError("Indicare una motivazione per la riapertura.")
 
     note.is_closed = False
     await db.flush()
