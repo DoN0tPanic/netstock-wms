@@ -40,6 +40,7 @@ from app.services.extraction.templates import (
     template_spec_from_model,
     template_spec_from_override,
 )
+from app.services.extraction.verifica_template import verifica_field_specs
 
 router = APIRouter(tags=["extraction"])
 settings = get_settings()
@@ -514,13 +515,24 @@ async def test_template(
     if model is None:
         raise NotFoundError("Template non trovato.", details={"id": str(template_id)})
 
+    # La prova deve dire se il template è rotto, non rispondere «nessun campo
+    # trovato» come se l'etichetta fosse illeggibile. Vale per le modifiche
+    # non salvate e per un template salvato prima che i controlli esistessero.
     if field_specs:
         try:
             override = json.loads(field_specs)
         except json.JSONDecodeError as exc:
             raise ValidationAppError(f"field_specs non è un JSON valido: {exc}") from exc
+        try:
+            verifica_field_specs(override)
+        except ValueError as exc:
+            raise ValidationAppError(str(exc)) from exc
         template = template_spec_from_override(model, override)
     else:
+        try:
+            verifica_field_specs(model.field_specs)
+        except ValueError as exc:
+            raise ValidationAppError(f"Il template salvato non è valido: {exc}") from exc
         template = template_spec_from_model(model)
 
     image_bytes_list, _total_bytes = await _read_and_validate_images(images)

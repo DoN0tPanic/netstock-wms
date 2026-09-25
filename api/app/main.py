@@ -8,15 +8,18 @@ import httpx
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.api.v1 import api_router
 from app.api.v1.health import router as health_router
 from app.config import get_settings
 from app.db import AsyncSessionLocal
+from app.errori_database import traduci
 from app.exceptions import AppError
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIDMiddleware
@@ -237,17 +240,38 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     )
 
 
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+    # Un vincolo del database che ferma un dato sbagliato non è un guasto:
+    # è il database che fa il suo lavoro. Va detto come un rifiuto, non come
+    # un 500. La traduzione vive in `errori_database`.
+    stato, corpo = traduci(exc)
+    return JSONResponse(status_code=stato, content=corpo)
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
+    # `exc.errors()` porta con sé l'eccezione originale dei controlli scritti a
+    # mano (`ValueError` dentro `ctx`), che non è serializzabile: la risposta
+    # di un semplice rifiuto crollava in un 500. `jsonable_encoder` la riduce
+    # a testo. E quando il motivo l'abbiamo scritto noi, in italiano, merita
+    # di essere il messaggio, non un dettaglio sepolto.
+    errori = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
+    messaggio = "Dati non validi nella richiesta."
+    nostri = [
+        e["msg"].removeprefix("Value error, ") for e in errori if e.get("type") == "value_error"
+    ]
+    if len(nostri) == 1:
+        messaggio = nostri[0]
     return JSONResponse(
         status_code=422,
         content={
             "error": {
                 "code": "VALIDATION_ERROR",
-                "message": "Dati non validi nella richiesta.",
-                "details": {"errors": exc.errors()},
+                "message": messaggio,
+                "details": {"errors": errori},
             }
         },
     )

@@ -22,6 +22,39 @@ UpdateT = TypeVar("UpdateT", bound=BaseModel)
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
 
 
+async def _vieta_cicli(
+    db: AsyncSession, model: Any, item_id: uuid.UUID, nuovo_padre: uuid.UUID
+) -> None:
+    """Rifiuta un padre che è l'elemento stesso o uno dei suoi discendenti.
+
+    Ubicazioni e categorie sono alberi: un magazzino dentro il proprio
+    scaffale, o una categoria dentro la propria sottocategoria, non vuol dire
+    niente. L'API lo accettava, e il danno si vedeva altrove: il percorso
+    «Magazzino › Scaffale» diventava un anello, e nel cruscotto la merce di
+    quell'anello non risaliva a nessun magazzino.
+
+    Si risale dal nuovo padre verso la cima: se si incontra l'elemento, il
+    padre è un suo discendente. `visti` ferma la salita anche su un anello già
+    presente nei dati, che altrimenti la farebbe girare per sempre.
+    """
+    corrente: uuid.UUID | None = nuovo_padre
+    visti: set[uuid.UUID] = set()
+    while corrente is not None and corrente not in visti:
+        if corrente == item_id:
+            raise ValidationAppError(
+                "Non si può mettere un elemento dentro sé stesso o dentro uno dei suoi "
+                "sottoelementi: la gerarchia diventerebbe un anello.",
+                details={"parent_id": str(nuovo_padre)},
+            )
+        visti.add(corrente)
+        padre = await db.get(model, corrente)
+        if padre is None:
+            raise NotFoundError(
+                "L'elemento padre non esiste.", details={"parent_id": str(corrente)}
+            )
+        corrente = padre.parent_id
+
+
 def build_registry_router(
     *,
     prefix: str,
@@ -129,6 +162,8 @@ def build_registry_router(
         if instance is None:
             raise NotFoundError(f"{entity_name} non trovato.", details={"id": str(item_id)})
         changes = payload.model_dump(exclude_unset=True)
+        if changes.get("parent_id") is not None and hasattr(model, "parent_id"):
+            await _vieta_cicli(db, model, instance.id, changes["parent_id"])
         for key, value in changes.items():
             setattr(instance, key, value)
         await db.flush()

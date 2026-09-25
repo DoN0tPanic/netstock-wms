@@ -5,7 +5,7 @@ from fastapi import Cookie, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.exceptions import ForbiddenError, UnauthorizedError
+from app.exceptions import ForbiddenError, PasswordChangeRequiredError, UnauthorizedError
 from app.models.enums import UserRole
 from app.models.users import User
 from app.services.auth.session import get_session_user
@@ -21,7 +21,15 @@ _ROLE_RANK: dict[UserRole, int] = {
 }
 
 
+# Le sole porte aperte a chi ha una password provvisoria: sapere chi è,
+# cambiarla, uscire.
+_PERCORSI_CON_PASSWORD_PROVVISORIA = frozenset(
+    {"/api/v1/auth/me", "/api/v1/auth/change-password", "/api/v1/auth/logout"}
+)
+
+
 async def get_current_user(
+    request: Request,
     db: DbSession,
     netstock_session: Annotated[str | None, Cookie()] = None,
 ) -> User:
@@ -30,6 +38,15 @@ async def get_current_user(
     user = await get_session_user(db, netstock_session)
     if user is None:
         raise UnauthorizedError("Sessione scaduta o non valida: effettuare nuovamente il login.")
+    # L'obbligo di cambiare la password lo faceva rispettare solo il browser,
+    # che rimanda alla pagina del cambio. L'API invece lasciava lavorare:
+    # una password provvisoria — che l'amministratore conosce, perché l'ha
+    # data lui — restava buona per sempre a chiunque chiamasse l'API
+    # direttamente. Ora l'obbligo vale dove vale davvero.
+    if user.must_change_password and request.url.path not in _PERCORSI_CON_PASSWORD_PROVVISORIA:
+        raise PasswordChangeRequiredError(
+            "Prima di continuare devi cambiare la password provvisoria."
+        )
     return user
 
 

@@ -1,6 +1,6 @@
 import io
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -100,7 +100,9 @@ async def stock_table(db: AsyncSession) -> list[list[Any]]:
 
 
 @router.get("/export")
-async def export_stock(db: DbSession, user: CurrentUser, format: str = "csv") -> Any:
+async def export_stock(
+    db: DbSession, user: CurrentUser, format: Literal["csv", "xlsx"] = "csv"
+) -> Any:
     data_rows = await stock_table(db)
 
     if format == "xlsx":

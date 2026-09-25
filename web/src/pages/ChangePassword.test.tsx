@@ -45,6 +45,20 @@ describe('ChangePassword', () => {
     expect(screen.getByRole('button', { name: 'Salva nuova password' })).toBeDisabled();
   });
 
+  it('non accetta come nuova la password di adesso', async () => {
+    // Una provvisoria «cambiata» con sé stessa resta quella che
+    // l'amministratore conosce: il cambio obbligatorio non servirebbe a niente.
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByLabelText('Password attuale'), 'StessaPassword!2026');
+    await user.type(screen.getByLabelText('Nuova password'), 'StessaPassword!2026');
+    await user.type(screen.getByLabelText('Conferma nuova password'), 'StessaPassword!2026');
+
+    expect(screen.getByText('La nuova password deve essere diversa da quella attuale')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Salva nuova password' })).toBeDisabled();
+    expect(authApi.changePassword).not.toHaveBeenCalled();
+  });
+
   it('invia soltanto password attuale e nuova password quando il form è valido', async () => {
     vi.mocked(authApi.changePassword).mockResolvedValue(undefined);
     vi.mocked(authApi.me).mockResolvedValue({ id: 'user-1', username: 'utente', email: null, full_name: 'Utente', role: 'operator', must_change_password: false, permissions: { can_write: true, can_administer: false } });

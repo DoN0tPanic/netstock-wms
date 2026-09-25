@@ -150,6 +150,10 @@ async def change_password(
         payload.current_password, user.password_hash
     ):
         raise UnauthorizedError("Password attuale non corretta.")
+    # Una password provvisoria «cambiata» con sé stessa resta quella che
+    # l'amministratore conosce: il cambio obbligatorio non servirebbe a niente.
+    if payload.new_password == payload.current_password:
+        raise ValidationAppError("La nuova password deve essere diversa da quella attuale.")
     if len(payload.new_password) < settings.password_min_length:
         raise ValidationAppError(
             f"La nuova password deve avere almeno {settings.password_min_length} caratteri."

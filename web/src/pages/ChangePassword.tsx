@@ -14,7 +14,10 @@ export function ChangePassword() {
   const [submitting, setSubmitting] = useState(false);
   const tooShort = next.length > 0 && next.length < 12;
   const doesNotMatch = confirmation.length > 0 && confirmation !== next;
-  const valid = current.length > 0 && next.length >= 12 && confirmation === next;
+  // Rimettere quella di prima non è un cambio: una provvisoria resterebbe
+  // quella che l'amministratore conosce. Lo rifiuta anche il server.
+  const sameAsCurrent = next.length > 0 && next === current;
+  const valid = current.length > 0 && next.length >= 12 && confirmation === next && !sameAsCurrent;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,5 +35,5 @@ export function ChangePassword() {
     }
   };
 
-  return <main className="mx-auto max-w-md space-y-4 p-6"><h1 className="text-2xl font-bold">Cambia password</h1><p>Al primo accesso devi scegliere una nuova password di almeno 12 caratteri.</p><form className="space-y-4" onSubmit={(event) => void submit(event)}><PasswordInput label="Password attuale"  autoComplete="current-password" required value={current} onChange={(event) => setCurrent(event.target.value)}/><PasswordInput label="Nuova password"  autoComplete="new-password" required minLength={12} value={next} error={tooShort ? 'La nuova password deve contenere almeno 12 caratteri' : undefined} onChange={(event) => setNext(event.target.value)}/><PasswordInput label="Conferma nuova password"  autoComplete="new-password" required value={confirmation} error={doesNotMatch ? 'Le password non corrispondono' : undefined} onChange={(event) => setConfirmation(event.target.value)}/>{error && <p role="alert" className="text-red-700">{error}</p>}<Button type="submit" disabled={!valid} loading={submitting}>Salva nuova password</Button></form></main>;
+  return <main className="mx-auto max-w-md space-y-4 p-6"><h1 className="text-2xl font-bold">Cambia password</h1><p>Al primo accesso devi scegliere una nuova password di almeno 12 caratteri.</p><form className="space-y-4" onSubmit={(event) => void submit(event)}><PasswordInput label="Password attuale"  autoComplete="current-password" required value={current} onChange={(event) => setCurrent(event.target.value)}/><PasswordInput label="Nuova password"  autoComplete="new-password" required minLength={12} value={next} error={tooShort ? 'La nuova password deve contenere almeno 12 caratteri' : sameAsCurrent ? 'La nuova password deve essere diversa da quella attuale' : undefined} onChange={(event) => setNext(event.target.value)}/><PasswordInput label="Conferma nuova password"  autoComplete="new-password" required value={confirmation} error={doesNotMatch ? 'Le password non corrispondono' : undefined} onChange={(event) => setConfirmation(event.target.value)}/>{error && <p role="alert" className="text-red-700">{error}</p>}<Button type="submit" disabled={!valid} loading={submitting}>Salva nuova password</Button></form></main>;
 }

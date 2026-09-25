@@ -4,7 +4,16 @@
 set -uo pipefail
 # L'indirizzo è di questa installazione: si passa dall'ambiente.
 BASE_URL="${NETSTOCK_URL:?Manca NETSTOCK_URL, es. https://192.0.2.10}"
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# La cartella da cui si lavora decide quale installazione si tocca: Docker
+# Compose legge il `.env` della cartella corrente. Con `COMPOSE_FILE` si
+# lavora accanto a quel file — altrimenti un'istanza di prova finiva avviata
+# con i segreti di questa installazione (e, con la password sbagliata, non
+# ripartiva più). Senza, si resta nella cartella del progetto.
+if [ -n "${COMPOSE_FILE:-}" ]; then
+  cd "$(dirname "${COMPOSE_FILE%%:*}")"
+else
+  cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
 FALLITI=0
 
 impronta() {
@@ -19,7 +28,7 @@ impronta() {
 attendi() {
   local scaduto=$((SECONDS+120))
   until curl -sk $BASE_URL/health -o /dev/null -w '%{http_code}' 2>/dev/null | grep -q 200; do
-    [ $SECONDS -gt $scaduto ] && { echo "  l'applicazione non è tornata su entro 120s"; return 1; }
+    [ $SECONDS -gt $scaduto ] && { FALLITI=$((FALLITI+1)); echo "  FALLITO l'applicazione non è tornata su entro 120s"; return 1; }
     sleep 3
   done
   return 0
@@ -54,7 +63,10 @@ echo
 echo "== 3. Rimozione dei container e ricreazione (docker compose down / up) =="
 docker compose down >/dev/null 2>&1
 echo "  container rimossi: $(docker compose ps -a --format '{{.Service}}' | wc -l) rimasti"
-echo "  volume dati ancora presente: $(docker volume ls --format '{{.Name}}' | grep -c netstock_pgdata)"
+PROGETTO="${COMPOSE_PROJECT_NAME:-netstock}"
+VOLUMI=$(docker volume ls -q --filter "label=com.docker.compose.project=$PROGETTO" --filter "label=com.docker.compose.volume=pgdata" | wc -l)
+echo "  volume dati di «$PROGETTO» ancora presente: $VOLUMI"
+[ "$VOLUMI" -eq 1 ] || { FALLITI=$((FALLITI+1)); echo "  FALLITO il volume dei dati non c'è più"; }
 docker compose up -d >/dev/null 2>&1
 attendi && confronta "rimozione e ricreazione" "$PRIMA"
 echo
@@ -63,7 +75,9 @@ echo "== 4. Riavvio del solo database sotto l'applicazione =="
 docker compose restart db >/dev/null 2>&1
 sleep 8
 attendi && confronta "riavvio del database" "$PRIMA"
-echo "  l'API si è riconnessa: $(curl -sk $BASE_URL/health -o /dev/null -w '%{http_code}')"
+RICONNESSA=$(curl -sk "$BASE_URL/health" -o /dev/null -w '%{http_code}')
+echo "  l'API si è riconnessa: $RICONNESSA"
+[ "$RICONNESSA" = 200 ] || { FALLITI=$((FALLITI+1)); echo "  FALLITO l'API non risponde dopo il riavvio del database"; }
 echo
 echo "  totale: $FALLITI verifiche fallite"
 exit "$FALLITI"

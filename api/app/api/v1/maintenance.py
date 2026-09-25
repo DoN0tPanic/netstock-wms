@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import text
 from starlette.background import BackgroundTask
 
+from app.db import engine
 from app.deps import DbSession, require_role
 from app.exceptions import ConflictAppError, ValidationAppError
 from app.models.enums import UserRole
@@ -138,9 +139,9 @@ async def ripristina_backup(
        partire da un clic solo;
     2. si legge l'indice del file **prima** di toccare il database, così un
        file sbagliato viene rifiutato mentre tutto è ancora intatto;
-    3. si fa una copia di quello che c'è adesso, perché il ripristino è
-       l'unica operazione di questo sistema che cancella davvero dei dati;
-    4. si ripristina, e se fallisce si riapplica la copia del punto 3.
+    3. si chiude la transazione della richiesta stessa, che altrimenti
+       tratterrebbe un lucchetto su cui pg_restore resterebbe fermo;
+    4. si ripristina in una transazione sola: o tutto, o niente.
 
     Resta un limite da dire, non da nascondere: durante il ripristino le
     tabelle vengono ricreate, quindi chi sta lavorando in quel momento riceve
@@ -170,38 +171,36 @@ async def ripristina_backup(
         if not indice.ok:
             raise ValidationAppError(indice.messaggio, details={"dettaglio": indice.dettaglio})
 
-        prima = cartella / "prima-del-ripristino.dump"
-        sicurezza = await maintenance.crea_dump(prima)
-        if not sicurezza.ok:
-            raise ValidationAppError(
-                "Non riesco a salvare lo stato attuale, quindi non procedo con il ripristino.",
-                details={"dettaglio": sicurezza.dettaglio},
-            )
+        # La transazione di questa stessa richiesta va chiusa prima di toccare
+        # il database. Leggere l'utente per il controllo dei permessi l'aveva
+        # aperta, e restava aperta — con un lucchetto sulla tabella degli
+        # utenti — per tutta la durata della richiesta. pg_restore, per
+        # togliere i vincoli che citano quella tabella, aspettava la richiesta;
+        # la richiesta aspettava pg_restore. Nessuno dei due poteva finire, e
+        # PostgreSQL non lo vede: uno dei due aspetta un processo esterno.
+        await db.commit()
 
+        # Niente copia di sicurezza da rimettere se qualcosa va storto: il
+        # ripristino gira in una transazione sola, quindi quando fallisce il
+        # database è ancora esattamente com'era. Il vecchio «rientro» — rifare
+        # un ripristino con la copia presa un attimo prima — era diventato un
+        # secondo ripristino che poteva bloccarsi nello stesso punto del primo.
         async with maintenance.serratura():
             esito = await maintenance.ripristina(caricato)
             if not esito.ok:
-                rientro = await maintenance.ripristina(prima)
-                if not rientro.ok:
-                    # Il caso peggiore: il ripristino è fallito **e** lo stato
-                    # di prima non è tornato. Il database può essere a metà, e
-                    # chi legge deve saperlo dalla risposta, non dai log.
-                    return RestoreResponse(
-                        ok=False,
-                        messaggio=(
-                            "Ripristino fallito E stato precedente non ripristinato. "
-                            "Il database può essere incompleto: fermare l'applicazione e "
-                            "ripristinare a mano una copia (scripts/restore.sh)."
-                        ),
-                        dettaglio=f"{esito.dettaglio}\n---\n{rientro.dettaglio}",
-                        stato_precedente_ripristinato=False,
-                    )
                 return RestoreResponse(
                     ok=False,
-                    messaggio=f"{esito.messaggio} Lo stato di prima è stato rimesso.",
+                    messaggio=esito.messaggio,
                     dettaglio=esito.dettaglio,
                     stato_precedente_ripristinato=True,
                 )
+            # Le tabelle adesso sono nuove, ma le connessioni già aperte
+            # ricordano i piani delle query su quelle vecchie: la prima
+            # richiesta su ciascuna falliva con un 500
+            # («cached statement plan is invalid»), e chi aveva appena
+            # ripristinato vedeva errori e pensava a un ripristino rotto.
+            # Si chiudono: le prossime richieste ne apriranno di nuove.
+            await engine.dispose()
 
         # L'audit si scrive **dopo**, e nel database appena ripristinato: la
         # riga scritta prima è stata sostituita dal ripristino stesso, insieme

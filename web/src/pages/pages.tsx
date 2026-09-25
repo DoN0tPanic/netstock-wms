@@ -16,6 +16,7 @@ import {
   useVendors,
 } from "../api/queries";
 import { useTendinaPaginata } from "../api/tendina";
+import { useChiaveOperazione } from "../hooks/useChiaveOperazione";
 import { useElencoPaginato, type ElencoPaginato } from "../api/elencoPaginato";
 import { COLONNE_MAGAZZINO, COLONNE_PREDEFINITE, leggiColonne, scriviColonne, type ColonnaMagazzino } from "./inventoryColumns";
 import { ubicazioniDelGrafico, type BarraUbicazione } from "./ubicazioniGrafico";
@@ -408,6 +409,10 @@ export function Stock() {
   const [selected, setSelected] = useState<Map<string, InventoryRow>>(new Map());
   const [filtriAperti, setFiltriAperti] = useState(false);
   const [transferring, setTransferring] = useState(false);
+  // Una chiave per lo spostamento, e da lei una per ogni ubicazione di
+  // partenza: se si ripreme dopo un esito parziale, i gruppi già registrati
+  // vengono riconosciuti e soltanto gli altri si ritentano.
+  const operazioneSposta = useChiaveOperazione();
   const [destinationId, setDestinationId] = useState("");
   const [moving, setMoving] = useState(false);
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(filters)); }, [filters, storageKey]);
@@ -465,12 +470,13 @@ export function Stock() {
       // source location; serialized units without one can still be placed.
       if (!locationId && bulkItems.length) return { label, ok: false, error: "materiale sfuso senza ubicazione di partenza" };
       try {
-        await movementsApi.transfer({ location_from_id: locationId || null, location_to_id: destinationId, unit_ids: unitIds, bulk_items: bulkItems });
+        await movementsApi.transfer({ location_from_id: locationId || null, location_to_id: destinationId, unit_ids: unitIds, bulk_items: bulkItems }, `${operazioneSposta.corrente()}:${locationId || "senza"}`);
         return { label, ok: true, error: "" };
       } catch (reason) { return { label, ok: false, error: reason instanceof Error ? reason.message : "errore sconosciuto" }; }
     }));
     const succeeded = results.filter((result) => result.ok);
     const failed = results.filter((result) => !result.ok);
+    if (!failed.length) operazioneSposta.conclusa();
     const detail = failed.map((result) => `${result.label}: ${result.error}`).join("; ");
     toast.show(failed.length ? `Spostamento parziale: ${succeeded.length} riusciti, ${failed.length} falliti. ${detail}` : `Spostamento completato.`, failed.length ? "error" : "success");
     setSelected(new Map()); setTransferring(false); setDestinationId("");
@@ -563,6 +569,10 @@ export function UnitDetail() {
   const [savingDetails, setSavingDetails] = useState(false);
   const [attachingNote, setAttachingNote] = useState(false);
   const [scrapping, setScrapping] = useState(false);
+  // Rottamazione e cambio di ubicazione scrivono nel registro: una chiave per
+  // ciascuna, così ripremere dopo una risposta persa non li ripete.
+  const operazioneRottama = useChiaveOperazione();
+  const operazioneSalva = useChiaveOperazione();
   const [scrapReason, setScrapReason] = useState("");
   const [showScrap, setShowScrap] = useState(false);
   const query = useQuery({
@@ -603,7 +613,8 @@ export function UnitDetail() {
         reason: scrapReason.trim(),
         location_from_id: unit.location_id,
         unit_id: unit.id,
-      });
+      }, operazioneRottama.corrente());
+      operazioneRottama.conclusa();
       toast.show("Pezzo rottamato.", "success");
       setShowScrap(false);
       setScrapReason("");
@@ -641,7 +652,7 @@ export function UnitDetail() {
           location_to_id: detailsDraft.location_id,
           unit_ids: [unit.id],
           bulk_items: [],
-        });
+        }, operazioneSalva.corrente());
       }
       await unitsApi.update(id, {
         serial_number: detailsDraft.serial_number.trim(),
@@ -650,6 +661,7 @@ export function UnitDetail() {
         contract_ref: detailsDraft.contract_ref.trim() || null,
         notes: detailsDraft.notes.trim() || null,
       });
+      operazioneSalva.conclusa();
       toast.show("Dettagli aggiornati.", "success");
       setEditingDetails(false);
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["unit", id] }), queryClient.invalidateQueries({ queryKey: ["inventory"] })]);
@@ -1002,6 +1014,7 @@ export function Movements() {
   const toast = useToast();
   const { session } = useAuth();
   const [reversing, setReversing] = useState<StockMovement | null>(null);
+  const operazioneStorno = useChiaveOperazione();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const change = (key: keyof typeof emptyMovementFilters, value: string | number | string[]) => setFilters((current) => ({ ...current, [key]: value, page: key === "page" ? Number(value) : 1 }));
@@ -1018,7 +1031,8 @@ export function Movements() {
     if (!reversing || reason.trim().length < 10) return;
     setBusy(true);
     try {
-      await movementsApi.reverse(reversing.id, reason.trim());
+      await movementsApi.reverse(reversing.id, reason.trim(), operazioneStorno.corrente());
+      operazioneStorno.conclusa();
       toast.show("Movimento stornato.", "success");
       setReversing(null); setReason("");
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["movements"] }), queryClient.invalidateQueries({ queryKey: ["inventory"] })]);

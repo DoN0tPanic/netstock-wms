@@ -2,12 +2,13 @@ import uuid
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbSession, require_role
 from app.exceptions import NotFoundError, ValidationAppError
+from app.idempotenza import con_idempotenza
 from app.models.catalog import CatalogItem
 from app.models.delivery import DeliveryNote, DeliveryNoteLine
 from app.models.enums import UserRole
@@ -244,41 +245,45 @@ async def add_delivery_note_line(
 
 @router.post("/{note_id}/receive", response_model=ReceiveResponse, status_code=201)
 async def receive(
+    request: Request,
     note_id: uuid.UUID,
     payload: ReceiveRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    lines = [
-        ReceiveLine(
-            line_id=line.line_id,
-            condition=line.condition,
-            serials=[
-                SerialInput(
-                    serial_number=s.serial_number,
-                    mac_address=s.mac_address,
-                    location_id=s.location_id,
-                )
-                for s in line.serials
-            ],
-            quantity=line.quantity,
+    async def esegui() -> Any:
+        lines = [
+            ReceiveLine(
+                line_id=line.line_id,
+                condition=line.condition,
+                serials=[
+                    SerialInput(
+                        serial_number=s.serial_number,
+                        mac_address=s.mac_address,
+                        location_id=s.location_id,
+                    )
+                    for s in line.serials
+                ],
+                quantity=line.quantity,
+            )
+            for line in payload.lines
+        ]
+        result = await receive_delivery_note(
+            db,
+            performer=user,
+            delivery_note_id=note_id,
+            location_id=payload.location_id,
+            lines=lines,
+            confirm_warnings=set(payload.confirm_warnings),
+            occurred_at=payload.occurred_at,
         )
-        for line in payload.lines
-    ]
-    result = await receive_delivery_note(
-        db,
-        performer=user,
-        delivery_note_id=note_id,
-        location_id=payload.location_id,
-        lines=lines,
-        confirm_warnings=set(payload.confirm_warnings),
-        occurred_at=payload.occurred_at,
-    )
-    return ReceiveResponse(
-        created_unit_ids=result.created_unit_ids,
-        movement_ids=result.movement_ids,
-        delivery_note_closed=result.delivery_note_closed,
-    )
+        return ReceiveResponse(
+            created_unit_ids=result.created_unit_ids,
+            movement_ids=result.movement_ids,
+            delivery_note_closed=result.delivery_note_closed,
+        )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.delete("/{note_id}", status_code=204)

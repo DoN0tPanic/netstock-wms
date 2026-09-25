@@ -67,7 +67,7 @@ export function BackupAdmin() {
         await queryClient.invalidateQueries();
       } else {
         setEsito(`${risposta.messaggio}${risposta.stato_precedente_ripristinato
-          ? " Lo stato di prima è stato rimesso: il magazzino è come prima del tentativo."
+          ? " Il magazzino è com'era prima del tentativo."
           : " ATTENZIONE: lo stato di prima non è stato rimesso."} ${risposta.dettaglio}`);
       }
     } catch (motivo) { setEsito(motivo instanceof Error ? motivo.message : "Ripristino non riuscito."); }

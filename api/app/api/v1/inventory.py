@@ -1,6 +1,6 @@
 import io
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
@@ -268,7 +268,7 @@ async def inventory_table(db: AsyncSession, params: dict[str, Any]) -> list[list
 async def export_inventory(
     db: DbSession,
     user: CurrentUser,
-    format: str = "csv",
+    format: Literal["csv", "xlsx"] = "csv",
     q: str | None = None,
     # `?location=…&location=…`: ripetuto, non una lista separata da virgole —
     # è la forma che i browser generano da soli e che FastAPI valida elemento

@@ -2,7 +2,16 @@
 # Il database non si verifica leggendo lo schema: si verifica provando a
 # violarlo. Qui si tenta di fare ciò che il progetto dichiara impossibile.
 set -uo pipefail
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# La cartella da cui si lavora decide quale installazione si tocca: Docker
+# Compose legge il `.env` della cartella corrente. Con `COMPOSE_FILE` si
+# lavora accanto a quel file — altrimenti un'istanza di prova finiva avviata
+# con i segreti di questa installazione (e, con la password sbagliata, non
+# ripartiva più). Senza, si resta nella cartella del progetto.
+if [ -n "${COMPOSE_FILE:-}" ]; then
+  cd "$(dirname "${COMPOSE_FILE%%:*}")"
+else
+  cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
 psql_app() { docker compose exec -T db psql -U netstock -d netstock -Atc "$1" 2>&1; }
 FALLITI=0
 esito() { # etichetta, condizione

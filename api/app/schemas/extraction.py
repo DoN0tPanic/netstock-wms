@@ -3,10 +3,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models.enums import TemplateDocType
 from app.schemas.common import OrmModel
+from app.services.extraction.verifica_template import verifica_field_specs
 
 
 class ExtractionTemplateCreate(BaseModel):
@@ -18,6 +19,11 @@ class ExtractionTemplateCreate(BaseModel):
     llm_prompt: str | None = None
     priority: int = 100
 
+    @field_validator("field_specs")
+    @classmethod
+    def _specifiche_valide(cls, valore: dict[str, Any]) -> dict[str, Any]:
+        return verifica_field_specs(valore)
+
 
 class ExtractionTemplateUpdate(BaseModel):
     name: str | None = None
@@ -28,6 +34,11 @@ class ExtractionTemplateUpdate(BaseModel):
     llm_prompt: str | None = None
     priority: int | None = None
     is_active: bool | None = None
+
+    @field_validator("field_specs")
+    @classmethod
+    def _specifiche_valide(cls, valore: dict[str, Any] | None) -> dict[str, Any] | None:
+        return None if valore is None else verifica_field_specs(valore)
 
 
 class ExtractionTemplateResponse(OrmModel):

@@ -37,6 +37,13 @@ CONFERMA = "RIPRISTINA"
 # Un pg_dump o un pg_restore che non finisce tiene occupata la connessione e
 # il lock: meglio interromperlo che lasciarlo appeso.
 TIMEOUT = 900
+# Quanto un ripristino aspetta che qualcun altro liberi una tabella. Senza, un
+# lucchetto tenuto da una richiesta in corso lo lasciava fermo fino al
+# TIMEOUT qui sopra — un quarto d'ora — e poi il tentativo di rientro si
+# fermava nello stesso punto per un altro quarto d'ora. Trenta secondi bastano
+# a lasciar finire una richiesta normale; oltre, qualcuno sta lavorando e il
+# ripristino va rifatto quando non c'è nessuno.
+ATTESA_LUCCHETTI = "30s"
 
 # Una sola operazione per volta. Due ripristini in parallelo, o un ripristino
 # mentre si sta facendo la copia di sicurezza, si sovrappongono sulle stesse
@@ -96,14 +103,20 @@ def _senza_segreti(testo: str) -> str:
 
 
 async def _esegui(
-    *comando: str, ingresso: bytes | None = None, database: str | None = None
+    *comando: str,
+    ingresso: bytes | None = None,
+    database: str | None = None,
+    attesa_lucchetti: str | None = None,
 ) -> tuple[int, bytes, bytes]:
+    ambiente = _ambiente_libpq(database)
+    if attesa_lucchetti:
+        ambiente["PGOPTIONS"] = f"-c lock_timeout={attesa_lucchetti}"
     processo = await asyncio.create_subprocess_exec(
         *comando,
         stdin=asyncio.subprocess.PIPE if ingresso is not None else None,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env=_ambiente_libpq(database),
+        env=ambiente,
     )
     try:
         uscita, errori = await asyncio.wait_for(processo.communicate(ingresso), TIMEOUT)
@@ -207,20 +220,42 @@ async def ripristina(percorso: Path, database: str | None = None) -> Esito:
 
     `--clean --if-exists` toglie prima quello che c'è: senza, il ripristino si
     fermerebbe al primo oggetto già esistente e lascerebbe un database mezzo
-    vecchio e mezzo nuovo. `--exit-on-error` perché un ripristino che prosegue
-    dopo un errore è il modo peggiore di scoprirlo.
+    vecchio e mezzo nuovo.
+
+    `--single-transaction` è la garanzia che conta: o il database diventa
+    quello della copia, o resta com'era. Prima ogni oggetto veniva tolto e
+    confermato uno per volta, e un ripristino che si fermava a metà lasciava
+    vincoli già cancellati — il beta test ne ha contati cinque spariti in un
+    tentativo bloccato. Implica anche l'uscita al primo errore.
+
+    L'attesa sui lucchetti ha un tetto: se qualcuno sta usando le tabelle,
+    meglio un rifiuto in trenta secondi che un'attesa di un quarto d'ora.
     """
     codice, _, errori = await _esegui(
         "pg_restore",
         "--clean",
         "--if-exists",
         "--no-owner",
-        "--exit-on-error",
+        "--single-transaction",
         "--dbname",
         _ambiente_libpq(database)["PGDATABASE"],
         str(percorso),
         database=database,
+        attesa_lucchetti=ATTESA_LUCCHETTI,
     )
     if codice != 0:
-        return _errore("Il ripristino non è riuscito.", errori, operazione="ripristino")
+        testo = errori.decode(errors="replace")
+        if "lock timeout" in testo or "canceling statement due to lock timeout" in testo:
+            return _errore(
+                "Il ripristino non è partito: qualcuno sta usando il magazzino in "
+                "questo momento. Non è stato toccato niente; riprova quando non "
+                "c'è nessuno dentro.",
+                errori,
+                operazione="ripristino",
+            )
+        return _errore(
+            "Il ripristino non è riuscito. Il database non è stato toccato.",
+            errori,
+            operazione="ripristino",
+        )
     return Esito(True, "Ripristino completato.")

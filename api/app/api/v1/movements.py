@@ -1,13 +1,14 @@
 import uuid
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import CurrentUser, DbSession, require_role
+from app.idempotenza import con_idempotenza
 from app.models.catalog import CatalogItem, Location
 from app.models.enums import MovementType, UserRole
 from app.models.movements import StockMovement
@@ -227,7 +228,7 @@ async def movements_table(
 async def export_movements(
     db: DbSession,
     user: CurrentUser,
-    format: str = "csv",
+    format: Literal["csv"] = "csv",
     date_from: datetime | None = None,
     date_to: datetime | None = None,
 ) -> Any:
@@ -256,219 +257,255 @@ def _split_issue_items(
 
 @router.post("/issue", response_model=list[StockMovementResponse], status_code=201)
 async def issue_movement(
+    request: Request,
     payload: IssueRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    unit_lines, bulk_lines = _split_issue_items(payload.items)
-    result = await movement_service.issue(
-        db,
-        performer=user,
-        location_from_id=payload.location_from_id,
-        reference=payload.reference,
-        assignee=payload.assignee,
-        unit_lines=unit_lines,
-        bulk_lines=bulk_lines,
-        notes=payload.notes,
-        occurred_at=payload.occurred_at,
-    )
-    if payload.reservation_id is not None and result:
-        from app.services.reservations import fulfil_reservation
-
-        await fulfil_reservation(
-            db, performer=user, reservation_id=payload.reservation_id, movement_id=result[0].id
+    async def esegui() -> Any:
+        unit_lines, bulk_lines = _split_issue_items(payload.items)
+        result = await movement_service.issue(
+            db,
+            performer=user,
+            location_from_id=payload.location_from_id,
+            reference=payload.reference,
+            assignee=payload.assignee,
+            unit_lines=unit_lines,
+            bulk_lines=bulk_lines,
+            notes=payload.notes,
+            occurred_at=payload.occurred_at,
         )
-    return result
+        if payload.reservation_id is not None and result:
+            from app.services.reservations import fulfil_reservation
+
+            await fulfil_reservation(
+                db, performer=user, reservation_id=payload.reservation_id, movement_id=result[0].id
+            )
+        return result
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/transfer", response_model=list[StockMovementResponse], status_code=201)
 async def transfer_movement(
+    request: Request,
     payload: TransferRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
-    bulk_lines = [
-        movement_service.BulkLine(
-            catalog_item_id=b.catalog_item_id, quantity=b.quantity, condition=b.condition
+    async def esegui() -> Any:
+        unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
+        bulk_lines = [
+            movement_service.BulkLine(
+                catalog_item_id=b.catalog_item_id, quantity=b.quantity, condition=b.condition
+            )
+            for b in payload.bulk_items
+        ]
+        return await movement_service.transfer(
+            db,
+            performer=user,
+            location_from_id=payload.location_from_id,
+            location_to_id=payload.location_to_id,
+            unit_lines=unit_lines,
+            bulk_lines=bulk_lines,
+            notes=payload.notes,
+            occurred_at=payload.occurred_at,
         )
-        for b in payload.bulk_items
-    ]
-    return await movement_service.transfer(
-        db,
-        performer=user,
-        location_from_id=payload.location_from_id,
-        location_to_id=payload.location_to_id,
-        unit_lines=unit_lines,
-        bulk_lines=bulk_lines,
-        notes=payload.notes,
-        occurred_at=payload.occurred_at,
-    )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/return", response_model=list[StockMovementResponse], status_code=201)
 async def return_movement(
+    request: Request,
     payload: ReturnRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
-    bulk_lines = [
-        movement_service.BulkLine(
-            catalog_item_id=b.catalog_item_id, quantity=b.quantity, condition=b.condition
+    async def esegui() -> Any:
+        unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
+        bulk_lines = [
+            movement_service.BulkLine(
+                catalog_item_id=b.catalog_item_id, quantity=b.quantity, condition=b.condition
+            )
+            for b in payload.bulk_items
+        ]
+        return await movement_service.return_to_stock(
+            db,
+            performer=user,
+            location_to_id=payload.location_to_id,
+            reference=payload.reference,
+            unit_lines=unit_lines,
+            bulk_lines=bulk_lines,
+            notes=payload.notes,
+            occurred_at=payload.occurred_at,
         )
-        for b in payload.bulk_items
-    ]
-    return await movement_service.return_to_stock(
-        db,
-        performer=user,
-        location_to_id=payload.location_to_id,
-        reference=payload.reference,
-        unit_lines=unit_lines,
-        bulk_lines=bulk_lines,
-        notes=payload.notes,
-        occurred_at=payload.occurred_at,
-    )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/rma-out", response_model=list[StockMovementResponse], status_code=201)
 async def rma_out_movement(
+    request: Request,
     payload: RmaOutRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
-    return await movement_service.rma_out(
-        db,
-        performer=user,
-        location_from_id=payload.location_from_id,
-        location_to_id=payload.location_to_id,
-        reference=payload.reference,
-        unit_lines=unit_lines,
-        notes=payload.notes,
-        occurred_at=payload.occurred_at,
-    )
+    async def esegui() -> Any:
+        unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
+        return await movement_service.rma_out(
+            db,
+            performer=user,
+            location_from_id=payload.location_from_id,
+            location_to_id=payload.location_to_id,
+            reference=payload.reference,
+            unit_lines=unit_lines,
+            notes=payload.notes,
+            occurred_at=payload.occurred_at,
+        )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/rma-in", response_model=list[StockMovementResponse], status_code=201)
 async def rma_in_movement(
+    request: Request,
     payload: RmaInRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
-    return await movement_service.rma_in(
-        db,
-        performer=user,
-        location_from_id=payload.location_from_id,
-        location_to_id=payload.location_to_id,
-        reference=payload.reference,
-        unit_lines=unit_lines,
-        notes=payload.notes,
-        occurred_at=payload.occurred_at,
-    )
+    async def esegui() -> Any:
+        unit_lines = [movement_service.UnitLine(unit_id=uid) for uid in payload.unit_ids]
+        return await movement_service.rma_in(
+            db,
+            performer=user,
+            location_from_id=payload.location_from_id,
+            location_to_id=payload.location_to_id,
+            reference=payload.reference,
+            unit_lines=unit_lines,
+            notes=payload.notes,
+            occurred_at=payload.occurred_at,
+        )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/receive", response_model=FreeReceiveResponse, status_code=201)
 async def receive_without_note(
+    request: Request,
     payload: FreeReceiveRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    lines = [
-        FreeReceiveLine(
-            catalog_item_id=line.catalog_item_id,
-            condition=line.condition,
-            serials=[
-                SerialInput(
-                    serial_number=s.serial_number,
-                    mac_address=s.mac_address,
-                    location_id=s.location_id,
-                )
-                for s in line.serials
-            ],
-            quantity=line.quantity,
+    async def esegui() -> Any:
+        lines = [
+            FreeReceiveLine(
+                catalog_item_id=line.catalog_item_id,
+                condition=line.condition,
+                serials=[
+                    SerialInput(
+                        serial_number=s.serial_number,
+                        mac_address=s.mac_address,
+                        location_id=s.location_id,
+                    )
+                    for s in line.serials
+                ],
+                quantity=line.quantity,
+            )
+            for line in payload.lines
+        ]
+        result = await receive_free_stock(
+            db,
+            performer=user,
+            location_id=payload.location_id,
+            lines=lines,
+            confirm_warnings=set(payload.confirm_warnings),
+            occurred_at=payload.occurred_at,
         )
-        for line in payload.lines
-    ]
-    result = await receive_free_stock(
-        db,
-        performer=user,
-        location_id=payload.location_id,
-        lines=lines,
-        confirm_warnings=set(payload.confirm_warnings),
-        occurred_at=payload.occurred_at,
-    )
-    return FreeReceiveResponse(
-        created_unit_ids=result.created_unit_ids, movement_ids=result.movement_ids
-    )
+        return FreeReceiveResponse(
+            created_unit_ids=result.created_unit_ids, movement_ids=result.movement_ids
+        )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/adjust", response_model=StockMovementResponse, status_code=201)
 async def adjust_movement(
+    request: Request,
     payload: AdjustRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.admin)),
 ) -> Any:
-    unit_line = movement_service.UnitLine(unit_id=payload.unit_id) if payload.unit_id else None
-    bulk_line = (
-        movement_service.BulkLine(
-            catalog_item_id=payload.catalog_item_id,
-            quantity=payload.quantity,
-            condition=payload.condition,
+    async def esegui() -> Any:
+        unit_line = movement_service.UnitLine(unit_id=payload.unit_id) if payload.unit_id else None
+        bulk_line = (
+            movement_service.BulkLine(
+                catalog_item_id=payload.catalog_item_id,
+                quantity=payload.quantity,
+                condition=payload.condition,
+            )
+            if payload.catalog_item_id and payload.quantity
+            else None
         )
-        if payload.catalog_item_id and payload.quantity
-        else None
-    )
-    return await movement_service.adjust(
-        db,
-        performer=user,
-        reason=payload.reason,
-        unit_line=unit_line,
-        bulk_line=bulk_line,
-        location_from_id=payload.location_from_id,
-        location_to_id=payload.location_to_id,
-        allow_negative=payload.allow_negative,
-        occurred_at=payload.occurred_at,
-        notes=payload.notes,
-    )
+        return await movement_service.adjust(
+            db,
+            performer=user,
+            reason=payload.reason,
+            unit_line=unit_line,
+            bulk_line=bulk_line,
+            location_from_id=payload.location_from_id,
+            location_to_id=payload.location_to_id,
+            allow_negative=payload.allow_negative,
+            occurred_at=payload.occurred_at,
+            notes=payload.notes,
+        )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/scrap", response_model=StockMovementResponse, status_code=201)
 async def scrap_movement(
+    request: Request,
     payload: ScrapRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.admin)),
 ) -> Any:
-    unit_line = movement_service.UnitLine(unit_id=payload.unit_id) if payload.unit_id else None
-    bulk_line = (
-        movement_service.BulkLine(
-            catalog_item_id=payload.catalog_item_id,
-            quantity=payload.quantity,
-            condition=payload.condition,
+    async def esegui() -> Any:
+        unit_line = movement_service.UnitLine(unit_id=payload.unit_id) if payload.unit_id else None
+        bulk_line = (
+            movement_service.BulkLine(
+                catalog_item_id=payload.catalog_item_id,
+                quantity=payload.quantity,
+                condition=payload.condition,
+            )
+            if payload.catalog_item_id and payload.quantity
+            else None
         )
-        if payload.catalog_item_id and payload.quantity
-        else None
-    )
-    return await movement_service.scrap(
-        db,
-        performer=user,
-        reason=payload.reason,
-        location_from_id=payload.location_from_id,
-        unit_line=unit_line,
-        bulk_line=bulk_line,
-        occurred_at=payload.occurred_at,
-        notes=payload.notes,
-    )
+        return await movement_service.scrap(
+            db,
+            performer=user,
+            reason=payload.reason,
+            location_from_id=payload.location_from_id,
+            unit_line=unit_line,
+            bulk_line=bulk_line,
+            occurred_at=payload.occurred_at,
+            notes=payload.notes,
+        )
+
+    return await con_idempotenza(request, db, user, esegui)
 
 
 @router.post("/{movement_id}/reverse", response_model=StockMovementResponse, status_code=201)
 async def reverse_movement(
+    request: Request,
     movement_id: uuid.UUID,
     payload: ReverseRequest,
     db: DbSession,
     user: User = Depends(require_role(UserRole.operator)),
 ) -> Any:
-    return await movement_service.reverse(
-        db, performer=user, movement_id=movement_id, reason=payload.reason
-    )
+    async def esegui() -> Any:
+        return await movement_service.reverse(
+            db, performer=user, movement_id=movement_id, reason=payload.reason
+        )
+
+    return await con_idempotenza(request, db, user, esegui)

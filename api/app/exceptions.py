@@ -73,3 +73,10 @@ class LockedOutError(AppError):
 class RateLimitedError(AppError):
     status_code = 429
     code = "RATE_LIMITED"
+
+
+class PasswordChangeRequiredError(AppError):
+    """Chi ha una password provvisoria deve cambiarla prima di lavorare."""
+
+    status_code = 403
+    code = "PASSWORD_CHANGE_REQUIRED"

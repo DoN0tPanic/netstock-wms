@@ -1,8 +1,9 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from app.models.enums import ItemCondition, MovementType, UnitStatus
 from app.schemas.common import OrmModel
@@ -124,12 +125,26 @@ class BulkLineRequest(BaseModel):
     condition: ItemCondition = ItemCondition.new
 
 
+# Il riferimento è l'unico legame fra un'uscita e il ticket, il cliente o il
+# cantiere per cui è uscita. Era obbligatorio solo sulla carta: una stringa
+# vuota, o fatta di spazi, passava — e un'uscita senza riferimento è merce
+# che non si sa dove sia andata.
+Riferimento = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+def _almeno_qualcosa(unit_ids: list[uuid.UUID], bulk_items: list["BulkLineRequest"]) -> None:
+    # Una richiesta senza pezzi né quantità rispondeva «fatto» senza aver
+    # fatto niente: meglio dire che manca il contenuto.
+    if not unit_ids and not bulk_items:
+        raise ValueError("Indica almeno un pezzo o una quantità.")
+
+
 class IssueRequest(BaseModel):
     occurred_at: datetime | None = None
     location_from_id: uuid.UUID
-    reference: str
+    reference: Riferimento
     assignee: str | None = None
-    items: list[UnitLineRequest | BulkLineRequest] = []
+    items: list[UnitLineRequest | BulkLineRequest] = Field(min_length=1)
     reservation_id: uuid.UUID | None = None
     notes: str | None = None
 
@@ -145,22 +160,32 @@ class TransferRequest(BaseModel):
     bulk_items: list[BulkLineRequest] = []
     notes: str | None = None
 
+    @model_validator(mode="after")
+    def _non_vuoto(self) -> "TransferRequest":
+        _almeno_qualcosa(self.unit_ids, self.bulk_items)
+        return self
+
 
 class ReturnRequest(BaseModel):
     occurred_at: datetime | None = None
     location_to_id: uuid.UUID
-    reference: str
+    reference: Riferimento
     unit_ids: list[uuid.UUID] = []
     bulk_items: list[BulkLineRequest] = []
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def _non_vuoto(self) -> "ReturnRequest":
+        _almeno_qualcosa(self.unit_ids, self.bulk_items)
+        return self
 
 
 class RmaOutRequest(BaseModel):
     occurred_at: datetime | None = None
     location_from_id: uuid.UUID
     location_to_id: uuid.UUID
-    reference: str
-    unit_ids: list[uuid.UUID]
+    reference: Riferimento
+    unit_ids: list[uuid.UUID] = Field(min_length=1)
     notes: str | None = None
 
 
@@ -168,8 +193,8 @@ class RmaInRequest(BaseModel):
     occurred_at: datetime | None = None
     location_from_id: uuid.UUID
     location_to_id: uuid.UUID
-    reference: str
-    unit_ids: list[uuid.UUID]
+    reference: Riferimento
+    unit_ids: list[uuid.UUID] = Field(min_length=1)
     notes: str | None = None
 
 

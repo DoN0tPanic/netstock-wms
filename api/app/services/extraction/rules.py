@@ -34,7 +34,14 @@ def _unanchored(pattern: str) -> str:
         pattern = pattern[1:]
     if pattern.endswith("$") and not pattern.endswith(r"\$"):
         pattern = pattern[:-1]
-    return f"(?<![{_TOKEN_CHARS}])(?:{pattern})(?![{_TOKEN_CHARS}])"
+    # Una barra fra due cifre tiene unita la sequenza, come il trattino: senza,
+    # dentro «23/09/2026» il pezzo «23/09» sembrava un valore intero, e una
+    # bolla il cui numero non era di sole cifre («DDT n. 777-A del 23/09/2026»)
+    # si vedeva proporre come numero un pezzo della data. «S/N:» non cambia:
+    # lì la barra sta fra due lettere.
+    return (
+        f"(?<![{_TOKEN_CHARS}])(?<![0-9]/)(?:{pattern})(?![{_TOKEN_CHARS}])(?!/[0-9])"
+    )
 
 
 def _loosen_for_ocr(pattern: str) -> str:
