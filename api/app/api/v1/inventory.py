@@ -118,6 +118,11 @@ _FILTER_CLAUSE = """
         OR serial_number ILIKE '%' || CAST(:q AS text) || '%'
         OR mac_address ILIKE '%' || CAST(:q AS text) || '%'
         OR part_number ILIKE '%' || CAST(:q AS text) || '%'
+        -- Il nome dell'articolo: è come la merce si chiama parlando, e chi
+        -- cerca «telefono» o «switch 48 porte» non ha in testa il codice.
+        -- Senza, la ricerca trovava tutto tranne la parola che l'operatore
+        -- usa davvero.
+        OR name ILIKE '%' || CAST(:q AS text) || '%'
         OR delivery_note_number ILIKE '%' || CAST(:q AS text) || '%'
     )
     -- Ubicazioni: nessuna (tutte), una, o parecchie insieme. Un magazzino

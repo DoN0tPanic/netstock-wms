@@ -489,7 +489,10 @@ export function Stock() {
 // compaiano lo decide la preferenza di chi guarda (`inventoryColumns.ts`).
 const inventoryColumns = (ubicazioni: Location[]): Record<ColonnaMagazzino, { key: string; label: string; render: (row: InventoryRow) => ReactNode }> => ({
   serial: { key: "serial", label: "Seriale / MAC", render: (row) => row.kind === "unit" ? <><Link className="font-medium text-blue-700 underline" to={`/units/${row.row_key}`}>{row.serial_number ?? "—"}</Link>{row.mac_address && <div className="text-xs text-slate-500">{row.mac_address}</div>}</> : "—" },
-  model: { key: "model", label: "Modello", render: (row) => <><strong>{row.part_number}</strong><div>{row.name}</div></> },
+  // Il nome davanti, il codice sotto: a colpo d'occhio si riconosce la merce
+  // per come si chiama, non per la sigla. Il part number resta perché è quello
+  // che si ordina e si confronta, ma è il dettaglio, non l'identità.
+  model: { key: "model", label: "Modello", render: (row) => <><strong>{row.name}</strong><div className="text-xs text-slate-500">{row.part_number}</div></> },
   vendor: { key: "vendor", label: "Fornitore", render: (row) => row.vendor_code },
   category: { key: "category", label: "Categoria", render: (row) => row.category_code },
   location: { key: "location", label: "Ubicazione", render: (row) => <span title={row.location_code ?? ""}>{percorsoUbicazione(ubicazioni, row.location_id)}</span> },

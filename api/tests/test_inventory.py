@@ -138,3 +138,50 @@ async def test_inventory_filter_by_location(app_db_session) -> None:
         location=[],
     )
     assert senza_filtro.total == 1
+
+
+async def test_inventory_trova_anche_per_nome_dell_articolo(app_db_session) -> None:
+    """Cercare «telefono» deve trovare i telefoni.
+
+    La ricerca del magazzino guardava seriale, MAC, part number e bolla, ma non
+    il nome: chi cerca la merce per come si chiama parlando non trovava nulla,
+    e il campo sembrava rotto.
+    """
+    serial_number, bulk_part_number, _location_id = await _seed_unit_and_bulk(app_db_session)
+
+    per_nome = await list_inventory(
+        db=app_db_session,
+        user=_FakeUser(role=UserRole.viewer),
+        q="serializzato di test inventario",
+        page=1,
+        page_size=50,
+    )
+    assert per_nome.total == 1
+    assert per_nome.items[0]["serial_number"] == serial_number
+
+    # Vale anche per la merce sfusa, che un seriale da cercare non ce l'ha.
+    sfuso_per_nome = await list_inventory(
+        db=app_db_session,
+        user=_FakeUser(role=UserRole.viewer),
+        q="sfuso di test inventario",
+        page=1,
+        page_size=50,
+    )
+    assert sfuso_per_nome.total == 1
+    assert sfuso_per_nome.items[0]["part_number"] == bulk_part_number
+
+
+async def test_inventory_cerca_ancora_per_part_number_e_seriale(app_db_session) -> None:
+    # Il nome si aggiunge, non sostituisce: quello che si cercava prima
+    # deve continuare a trovarsi.
+    serial_number, bulk_part_number, _location_id = await _seed_unit_and_bulk(app_db_session)
+
+    for testo, attesi in ((serial_number, 1), (bulk_part_number, 1)):
+        esito = await list_inventory(
+            db=app_db_session,
+            user=_FakeUser(role=UserRole.viewer),
+            q=testo,
+            page=1,
+            page_size=50,
+        )
+        assert esito.total == attesi, testo
