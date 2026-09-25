@@ -41,6 +41,13 @@ const messageOf = (reason: unknown) => reason instanceof Error ? reason.message 
 
 export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) => void }) {
   const [notes, setNotes] = useState<DeliveryNote[]>([]); const [noteMode, setNoteMode] = useState('');
+  // Le bolle chiuse di recente: una bolla si chiude da sola appena tutte le
+  // righe risultano complete, e sparendo dal menù lasciava senza risposta la
+  // domanda più normale del banco — «è arrivato un altro collo della stessa
+  // bolla, dove lo metto?». Ora si vedono, marcate, e si riaprono da qui.
+  const [noteChiuse, setNoteChiuse] = useState<DeliveryNote[]>([]);
+  const [daRiaprire, setDaRiaprire] = useState<DeliveryNote | null>(null);
+  const [motivoRiapertura, setMotivoRiapertura] = useState('');
   const [noteDraft, setNoteDraft] = useState({ number: '', note_date: today(), supplier_id: '', po_number: '' });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]); const [supplierName, setSupplierName] = useState(''); const [showSupplier, setShowSupplier] = useState(false);
   const [lines, setLines] = useState<ReceiveLine[]>([freshLine()]); const [catalog, setCatalog] = useState<CatalogItem[]>([]);
@@ -71,7 +78,7 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
   /** Cosa si vede adesso: su scrivania tutto, su telefono il passo corrente. */
   const vedi = (numero: number) => !stretto || passo === numero;
 
-  useEffect(() => { void Promise.all([deliveryNotesApi.list({ is_closed: false }).then((p) => setNotes(p.items)), tutteLeVoci((parametri) => suppliersApi.list(parametri)).then(setSuppliers), tutteLeVoci((parametri) => locationsApi.list(parametri)).then((voci) => setLocations((old) => merge(old, voci))), extractionApi.templates.list().then(setTemplates)]).catch((r) => setError(messageOf(r))); }, []);
+  useEffect(() => { void Promise.all([deliveryNotesApi.list({ is_closed: false }).then((p) => setNotes(p.items)), deliveryNotesApi.list({ is_closed: true, page_size: 25 }).then((p) => setNoteChiuse(p.items)), tutteLeVoci((parametri) => suppliersApi.list(parametri)).then(setSuppliers), tutteLeVoci((parametri) => locationsApi.list(parametri)).then((voci) => setLocations((old) => merge(old, voci))), extractionApi.templates.list().then(setTemplates)]).catch((r) => setError(messageOf(r))); }, []);
 
   // La lettura strutturale finisce dopo la risposta che l'ha avviata: con una
   // GPU in pochi secondi, senza in qualche minuto. Si interroga finché non è
@@ -169,7 +176,30 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
 
   const updateLine = (key: string, change: Partial<ReceiveLine>) => setLines((old) => old.map((line) => line.key === key ? { ...line, ...change } : line));
   const chooseDefaultLocation = (locationId: string) => { setDefaultLocationId(locationId); setLines((old) => old.map((line) => ({ ...line, pieces: line.pieces.map((piece) => piece.location_id ? piece : { ...piece, location_id: locationId }) }))); };
-  const chooseNote = async (value: string) => { setNoteMode(value); setWarnings([]); setPending(null); if (!value || value === 'new' || value === 'none') { setLines([freshLine()]); return; } setBusy(true); setError(''); try { const note = await deliveryNotesApi.get(value); const hydrated = await Promise.all((note.lines ?? []).map(async (line) => ({ key: line.id, lineId: line.id, item: await catalogApi.get(line.catalog_item_id), expected: Number(line.qty_expected), condition: line.condition, pieces: [], quantity: Math.max(0, Number(line.qty_expected) - Number(line.qty_received)) }))); setCatalog((old) => merge(old, hydrated.map((line) => line.item))); setLines(hydrated.length ? hydrated : [freshLine()]); } catch (r) { setError(messageOf(r)); } finally { setBusy(false); } };
+  // Idrata una bolla aperta: le sue righe diventano le righe del modulo.
+  const idrataNota = async (value: string) => { setBusy(true); setError(''); try { const note = await deliveryNotesApi.get(value); const hydrated = await Promise.all((note.lines ?? []).map(async (line) => ({ key: line.id, lineId: line.id, item: await catalogApi.get(line.catalog_item_id), expected: Number(line.qty_expected), condition: line.condition, pieces: [], quantity: Math.max(0, Number(line.qty_expected) - Number(line.qty_received)) }))); setCatalog((old) => merge(old, hydrated.map((line) => line.item))); setLines(hydrated.length ? hydrated : [freshLine()]); } catch (r) { setError(messageOf(r)); } finally { setBusy(false); } };
+  const chooseNote = async (value: string) => {
+    setWarnings([]); setPending(null); setDaRiaprire(null); setMotivoRiapertura('');
+    setNoteMode(value);
+    if (!value || value === 'new' || value === 'none') { setLines([freshLine()]); return; }
+    // Una bolla chiusa non accetta merce finché qualcuno non dice perché la
+    // sta riaprendo: la si sceglie, e il modulo chiede il motivo invece di
+    // rifiutare in silenzio.
+    const chiusa = noteChiuse.find((nota) => nota.id === value);
+    if (chiusa) { setDaRiaprire(chiusa); setLines([freshLine()]); return; }
+    await idrataNota(value);
+  };
+  const riapriNota = async () => {
+    if (!daRiaprire || motivoRiapertura.trim().length < 10) return;
+    setBusy(true); setError('');
+    try {
+      const riaperta = await deliveryNotesApi.reopen(daRiaprire.id, motivoRiapertura.trim());
+      setNoteChiuse((old) => old.filter((nota) => nota.id !== riaperta.id));
+      setNotes((old) => merge(old, [riaperta]));
+      setDaRiaprire(null); setMotivoRiapertura('');
+      await idrataNota(riaperta.id);
+    } catch (r) { setError(messageOf(r)); } finally { setBusy(false); }
+  };
   const selectItem = (key: string, id: string) => { if (id === '__new') setItemForLine(key); else updateLine(key, { item: catalog.find((item) => item.id === id), pieces: [] }); };
   const recognizeItem = async (key: string, result: ExtractionResult) => { if (!result.matched_catalog_item || lines.find((line) => line.key === key)?.item) return; try { const item = await catalogApi.get(result.matched_catalog_item.id); setCatalog((old) => merge(old, [item])); updateLine(key, { item }); } catch (r) { setError(messageOf(r)); } };
   const addExtracted = (key: string, values: Record<string, string>) => { const serial = values.serial_number ?? values.serial ?? values['stock_unit.serial_number']; const line = lines.find((candidate) => candidate.key === key); const normalized = serial?.trim().toUpperCase(); if (!normalized || !line || !defaultLocationId || line.pieces.some((piece) => piece.serial_number === normalized)) return; updateLine(key, { pieces: [...line.pieces, newPiece(normalized, defaultLocationId, values.mac_address ?? values.mac)] }); };
@@ -188,6 +218,7 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
   // una per una, così si legge cosa resta da fare invece di indovinarlo.
   const mancante: string[] = [];
   if (!noteMode) mancante.push('Scegli una bolla, creane una nuova, oppure indica che la merce arriva senza bolla.');
+  if (daRiaprire) mancante.push(`La bolla ${daRiaprire.number} è chiusa: indica il motivo e riaprila per collegarci altra merce.`);
   if (!defaultLocationId) mancante.push('Scegli l\'ubicazione predefinita nella sezione 2.');
   if (noteMode === 'new') {
     if (!noteDraft.number) mancante.push('Manca il numero della bolla.');
@@ -242,7 +273,16 @@ export function ReceiveForm({ onSuccess }: { onSuccess: (createdUnits: number) =
   return <div className="space-y-6">{error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
     {stretto && <nav aria-label="Passi della ricezione" className="sticky top-16 z-20 rounded-xl border bg-white px-3 py-2 shadow-sm"><ol className="flex items-center gap-2">{PASSI.map((nome, indice) => { const numero = indice + 1; const fatto = numero < passo; return <li key={nome} className="flex min-w-0 flex-1 items-center gap-2 last:flex-none"><button type="button" disabled={numero > passo} aria-current={numero === passo ? 'step' : undefined} aria-label={`Passo ${numero}: ${nome}`} onClick={() => setPasso(numero)} className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${numero === passo ? 'bg-blue-600 text-white' : fatto ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-400'}`}>{fatto ? <Check size={16}/> : numero}</button>{numero < PASSI.length && <span aria-hidden className={`h-0.5 min-w-2 flex-1 ${fatto ? 'bg-blue-300' : 'bg-slate-200'}`}/>}</li>; })}</ol></nav>}
     {vedi(1) && <>
-    <section className="space-y-4 rounded-xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">1. Bolla</h2><p className="text-sm text-slate-600">Carica la bolla — foto, scansione o PDF, anche più pagine insieme — per precompilare una proposta, oppure procedi manualmente.</p></div><label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">{scanningNote ? <Loader2 size={19} className="animate-spin" aria-hidden/> : <ScanLine size={19}/>}{scanningNote ? 'Lettura…' : 'Leggi bolla'}<input className="sr-only" type="file" accept={EXTRACTION_FILE_ACCEPT} capture="environment" multiple disabled={scanningNote} onChange={(e) => void readDeliveryNote(e.target.files)}/></label></div><Select label="Bolla" value={noteMode} onChange={(e) => void chooseNote(e.target.value)}><option value="">Seleziona una bolla aperta…</option>{notes.map((note) => <option key={note.id} value={note.id}>{note.number} · {note.note_date}</option>)}<option value="new">+ Nuova bolla</option><option value="none">Senza bolla (aggiungi il numero dopo)</option></Select>{noteMode === 'new' && <div className="grid gap-3 md:grid-cols-2"><Input label="Numero bolla" required value={noteDraft.number} onChange={(e) => setNoteDraft({ ...noteDraft, number: e.target.value })}/><Input label="Data" type="date" required value={noteDraft.note_date} onChange={(e) => setNoteDraft({ ...noteDraft, note_date: e.target.value })}/><Select label="Fornitore" required value={noteDraft.supplier_id} onChange={(e) => e.target.value === '__new' ? setShowSupplier(true) : setNoteDraft({ ...noteDraft, supplier_id: e.target.value })}><option value="">Seleziona…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}<option value="__new">+ Nuovo fornitore</option></Select><Input label="Numero ordine (opzionale)" value={noteDraft.po_number} onChange={(e) => setNoteDraft({ ...noteDraft, po_number: e.target.value })}/></div>}{noteMode === 'none' && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">La merce viene registrata subito in giacenza. Potrai collegare il numero di bolla in un secondo momento dal dettaglio di ogni pezzo, quando sarà disponibile.</p>}{noteExtraction && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">Proposta caricata: {noteExtraction.lines.length} righe · motore {noteExtraction.engine} ({noteExtraction.duration_ms} ms). Controlla e modifica tutto prima di registrare.</p>}</section>
+    <section className="space-y-4 rounded-xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">1. Bolla</h2><p className="text-sm text-slate-600">Carica la bolla — foto, scansione o PDF, anche più pagine insieme — per precompilare una proposta, oppure procedi manualmente.</p></div><label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">{scanningNote ? <Loader2 size={19} className="animate-spin" aria-hidden/> : <ScanLine size={19}/>}{scanningNote ? 'Lettura…' : 'Leggi bolla'}<input className="sr-only" type="file" accept={EXTRACTION_FILE_ACCEPT} capture="environment" multiple disabled={scanningNote} onChange={(e) => void readDeliveryNote(e.target.files)}/></label></div><Select label="Bolla" value={noteMode} onChange={(e) => void chooseNote(e.target.value)}><option value="">Seleziona una bolla…</option>{notes.map((note) => <option key={note.id} value={note.id}>{note.number} · {note.note_date}</option>)}{noteChiuse.length > 0 && <optgroup label="Chiuse di recente (da riaprire)">{noteChiuse.map((note) => <option key={note.id} value={note.id}>{note.number} · {note.note_date}</option>)}</optgroup>}<option value="new">+ Nuova bolla</option><option value="none">Senza bolla (aggiungi il numero dopo)</option></Select>{noteMode === 'new' && <div className="grid gap-3 md:grid-cols-2"><Input label="Numero bolla" required value={noteDraft.number} onChange={(e) => setNoteDraft({ ...noteDraft, number: e.target.value })}/><Input label="Data" type="date" required value={noteDraft.note_date} onChange={(e) => setNoteDraft({ ...noteDraft, note_date: e.target.value })}/><Select label="Fornitore" required value={noteDraft.supplier_id} onChange={(e) => e.target.value === '__new' ? setShowSupplier(true) : setNoteDraft({ ...noteDraft, supplier_id: e.target.value })}><option value="">Seleziona…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}<option value="__new">+ Nuovo fornitore</option></Select><Input label="Numero ordine (opzionale)" value={noteDraft.po_number} onChange={(e) => setNoteDraft({ ...noteDraft, po_number: e.target.value })}/></div>}{daRiaprire && <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">
+      <p className="text-sm"><strong>La bolla {daRiaprire.number} è chiusa.</strong> Si è chiusa da sola quando tutte le righe risultavano complete. Per collegarci altra merce va riaperta: resta scritto nel registro chi l'ha fatto e perché.</p>
+      <Input label="Motivo della riapertura" value={motivoRiapertura} onChange={(e) => setMotivoRiapertura(e.target.value)}
+        placeholder="Es. arrivato un secondo collo con la stessa bolla"
+        hint="Almeno 10 caratteri."/>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" loading={busy} disabled={motivoRiapertura.trim().length < 10} onClick={() => void riapriNota()}>Riapri e continua</Button>
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => void chooseNote('')}>Annulla</Button>
+      </div>
+    </div>}{noteMode === 'none' && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">La merce viene registrata subito in giacenza. Potrai collegare il numero di bolla in un secondo momento dal dettaglio di ogni pezzo, quando sarà disponibile.</p>}{noteExtraction && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">Proposta caricata: {noteExtraction.lines.length} righe · motore {noteExtraction.engine} ({noteExtraction.duration_ms} ms). Controlla e modifica tutto prima di registrare.</p>}</section>
     {/* Fra il caricamento e la prima risposta passano parecchi secondi: è
         l'OCR di ogni pagina. Senza un segnale qui, l'unica cosa che cambia è
         la scritta sul pulsante, e sembra che la pagina si sia piantata. */}

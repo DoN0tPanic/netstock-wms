@@ -332,6 +332,48 @@ async def delete_delivery_note(
     await db.flush()
 
 
+@router.post("/{note_id}/reopen", response_model=DeliveryNoteResponse)
+async def reopen_delivery_note(
+    note_id: uuid.UUID,
+    payload: DeliveryNoteCloseRequest,
+    db: DbSession,
+    user: User = Depends(require_role(UserRole.operator)),
+) -> Any:
+    """Riapre una bolla chiusa, per potervi collegare altra merce.
+
+    Una bolla si chiude da sola appena tutte le righe risultano complete, e da
+    chiusa non accetta più né righe né ricezioni. Ma la merce vera non sempre
+    arriva tutta insieme: un secondo collo con lo stesso numero di bolla, o
+    dodici pezzi dove ne erano dichiarati dieci, lasciavano l'operatore senza
+    nessun modo di collegarli — la bolla non compariva più da nessuna parte.
+
+    Riaprire è un atto esplicito e motivato, come la chiusura manuale: niente
+    si riscrive, e nel registro resta chi l'ha riaperta, quando e perché.
+    """
+    note = await db.get(DeliveryNote, note_id)
+    if note is None:
+        raise NotFoundError("Bolla non trovata.", details={"id": str(note_id)})
+    if not note.is_closed:
+        raise ValidationAppError("La bolla è già aperta: puoi aggiungere merce così com'è.")
+    if not payload.reason or len(payload.reason.strip()) < 10:
+        raise ValidationAppError(
+            "Indicare una motivazione di almeno 10 caratteri per la riapertura."
+        )
+
+    note.is_closed = False
+    await db.flush()
+    await write_audit(
+        db,
+        actor=user,
+        actor_username=user.username,
+        action="delivery_note.reopen",
+        entity_type="delivery_note",
+        entity_id=str(note.id),
+        details={"reason": payload.reason},
+    )
+    return note
+
+
 @router.post("/{note_id}/close", response_model=DeliveryNoteResponse)
 async def close_delivery_note(
     note_id: uuid.UUID,

@@ -843,18 +843,52 @@ export function DeliveryNotes() {
 export function DeliveryNoteDetail() {
   const { id = "" } = useParams();
   const locations = useLocations();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const { session } = useAuth();
   const query = useQuery({
     queryKey: ["delivery-note", id],
     queryFn: () => deliveryNotesApi.get(id),
   });
   const units = useInventory({ delivery_note: id, page_size: 200 });
+  // Riaprire una bolla chiusa: è l'unico modo per collegarle altra merce, e
+  // resta scritto nel registro chi l'ha fatto e perché.
+  const [riaprendo, setRiaprendo] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const riapri = async () => {
+    if (motivo.trim().length < 10) return;
+    setBusy(true);
+    try {
+      await deliveryNotesApi.reopen(id, motivo.trim());
+      toast.show("Bolla riaperta: ora puoi collegarle altra merce da Ricevi merce.", "success");
+      setRiaprendo(false); setMotivo("");
+      await queryClient.invalidateQueries({ queryKey: ["delivery-note", id] });
+      await queryClient.invalidateQueries({ queryKey: ["delivery-notes"] });
+    } catch (reason) { toast.show(reason instanceof Error ? reason.message : "Impossibile riaprire la bolla.", "error"); }
+    finally { setBusy(false); }
+  };
   if (query.isLoading) return <Loading />;
   if (!query.data || query.isError) return <ErrorMessage />;
   return (
     <Page
       title={`Bolla ${query.data.number}`}
       description={`Data ${formatDate(query.data.note_date)} · ${query.data.is_closed ? "chiusa" : "da completare"}`}
+      actions={query.data.is_closed && can(session?.role, "operate")
+        ? <Button variant="secondary" onClick={() => setRiaprendo(true)}>Riapri bolla</Button>
+        : undefined}
     >
+      <Modal open={riaprendo} title={`Riapri la bolla ${query.data.number}`} onClose={() => !busy && setRiaprendo(false)}>
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">Una bolla si chiude da sola quando tutte le righe risultano complete. Riaprirla serve a collegarle altra merce — un secondo collo, o più pezzi di quanti ne dichiarava. Niente viene riscritto: la riapertura finisce nel registro di controllo con il tuo nome e questo motivo.</p>
+          <Input label="Motivo della riapertura" autoFocus value={motivo} onChange={(event) => setMotivo(event.target.value)}
+            placeholder="Es. arrivato un secondo collo con la stessa bolla" hint="Almeno 10 caratteri."/>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" disabled={busy} onClick={() => setRiaprendo(false)}>Annulla</Button>
+            <Button loading={busy} disabled={motivo.trim().length < 10} onClick={() => void riapri()}>Riapri</Button>
+          </div>
+        </div>
+      </Modal>
       <Table
         rows={query.data.lines ?? []}
         keyOf={(row) => row.id}
