@@ -195,9 +195,104 @@ make certs-ca && docker compose restart caddy
 
 Genera una piccola autorità locale e le fa firmare il certificato. Installando **una volta** `certs/netstock-ca.crt` su ogni telefono e computer (le istruzioni per Android, iOS, Windows e Linux le stampa il comando), l'avviso sparisce e il lucchetto diventa verde.
 
-Il compromesso, detto chiaramente: la chiave della CA resta su questa macchina, in `certs/` — escluso da git e leggibile solo dal proprietario. Per un magazzino su LAN è proporzionato; se l'azienda ha già una CA interna, la scelta giusta resta farsi firmare il certificato da quella.
+Il compromesso, detto chiaramente: la chiave della CA resta su questa macchina, in `certs/` — escluso da git e leggibile solo dal proprietario. Per un magazzino su LAN è proporzionato; se l'azienda ha già una CA interna, la scelta giusta resta farsi firmare il certificato da quella — come, lo spiega il paragrafo qui sotto.
 
 Se la macchina cambia indirizzo, `./scripts/gen-selfsigned-cert.sh` dice per quali nomi vale il certificato attuale e quali servirebbero adesso.
+
+### Con la CA aziendale
+
+Se l'azienda ha già una propria autorità di certificazione — per esempio Active Directory Certificate Services — è la strada migliore: i computer del dominio si fidano già di lei, quindi l'avviso sparisce senza installare niente, e su questa macchina non resta nessuna chiave capace di firmare altri certificati.
+
+La chiave privata nasce sul server e non ne esce mai. Alla CA va soltanto la richiesta di firma (CSR).
+
+Negli esempi il server si chiama `magazzino.azienda.local` e ha indirizzo `192.0.2.25` (un indirizzo riservato agli esempi): sostituiscili con i vostri.
+
+**1. Chiave e richiesta**, sul server, nella cartella del progetto. Nel `subjectAltName` vanno *tutti* i nomi con cui ci si collega: il nome DNS e, se qualcuno entra per indirizzo, anche l'IP. Un nome che manca lì è un nome per cui il browser dichiara il certificato non valido, anche se è firmato dalla CA giusta.
+
+```bash
+openssl req -new -newkey rsa:4096 -nodes \
+  -keyout certs/netstock-nuovo.key -out certs/netstock.csr \
+  -subj "/CN=magazzino.azienda.local" \
+  -addext "subjectAltName=DNS:magazzino.azienda.local,IP:192.0.2.25"
+chmod 600 certs/netstock-nuovo.key
+```
+
+La chiave nuova va in un file a parte: quella in uso resta al suo posto finché il certificato firmato non è arrivato e controllato.
+
+**2. La firma.** Si consegna `certs/netstock.csr` a chi gestisce la CA, chiedendo il modello **Server Web** (*Web Server*). Con Active Directory Certificate Services lo si può fare da un PC Windows del dominio:
+
+```
+certreq -submit -attrib "CertificateTemplate:WebServer" netstock.csr netstock.cer
+```
+
+oppure dalla pagina `https://<server-della-CA>/certsrv` → *Richiedi un certificato* → *Richiesta avanzata*, incollando il contenuto del file e scaricando il certificato in formato **Base64**. Servono anche i certificati **intermedi** della CA, se ce ne sono (la radice no): li fornisce chi gestisce la CA.
+
+Il certificato deve arrivare in formato PEM, cioè un file di testo che comincia con `-----BEGIN CERTIFICATE-----`. Se è binario, o se è arrivata una catena `.p7b`, si converte:
+
+```bash
+openssl x509 -inform der -in netstock.cer -out netstock.pem        # binario (DER)
+openssl pkcs7 -print_certs -in catena.p7b -out catena.pem          # catena .p7b
+```
+
+**3. I controlli, prima di installare.**
+
+```bash
+# Per quali nomi vale e fino a quando: devono esserci tutti quelli del punto 1
+openssl x509 -in netstock.pem -noout -subject -issuer -enddate -ext subjectAltName
+
+# È firmato per questa chiave? Le due righe devono essere identiche
+openssl x509 -in netstock.pem -noout -pubkey | sha256sum
+openssl pkey -in certs/netstock-nuovo.key -pubout | sha256sum
+```
+
+Se nel certificato mancano i nomi del `subjectAltName` — al loro posto compare `No extensions in certificate`, o la riga manca del tutto — il modello della CA non li ha copiati dalla richiesta: va chiesto a chi la gestisce. Non è un dettaglio da rimandare — i browser di oggi ignorano il nome comune (`CN`) e rifiutano un certificato senza quei nomi, anche se l'indirizzo è giusto.
+
+La durata conta per iPhone e iPad: rifiutano un certificato firmato da una CA privata che valga più di 825 giorni. Due anni vanno bene.
+
+**4. L'installazione.** Caddy vuole in un solo file il certificato del server **per primo**, seguito dagli intermedi, dal più vicino al server al più vicino alla radice. Il certificato e la chiave di prima restano da parte, per tornare indietro in un minuto:
+
+```bash
+cp -p certs/netstock.crt certs/netstock.crt.prima
+cp -p certs/netstock.key certs/netstock.key.prima
+cat netstock.pem intermedia.pem > certs/netstock.crt    # senza intermedi: solo netstock.pem
+mv certs/netstock-nuovo.key certs/netstock.key
+
+# Prima di riavviare: il primo certificato del file dev'essere quello della chiave.
+# Le due righe devono essere identiche.
+openssl x509 -in certs/netstock.crt -noout -pubkey | sha256sum
+openssl pkey -in certs/netstock.key -pubout | sha256sum
+
+docker compose restart caddy
+docker compose logs caddy --tail 5
+```
+
+Quel controllo non è scrupolo. Se nel file l'intermedia finisce prima del certificato del server, Caddy **non parte** (`private key does not match public key`) e con lui diventa irraggiungibile tutta l'applicazione, non solo il lucchetto. Il confronto lo scopre prima del riavvio; se le righe sono diverse, si rifà il `cat` nell'ordine giusto.
+
+Per tornare indietro:
+
+```bash
+mv certs/netstock.crt.prima certs/netstock.crt
+mv certs/netstock.key.prima certs/netstock.key
+docker compose restart caddy
+```
+
+**5. La verifica**, da un'altra macchina della rete:
+
+```bash
+openssl s_client -connect 192.0.2.25:443 -servername magazzino.azienda.local </dev/null 2>/dev/null \
+  | openssl x509 -noout -issuer -enddate
+```
+
+L'emittente dev'essere la CA aziendale. Poi, da un PC del dominio, la pagina deve aprirsi con il lucchetto e senza avvisi.
+
+Se qualcosa non va, i due sintomi più comuni:
+
+- **`unable to verify the first certificate`**, oppure il PC si fida e il telefono no: manca l'intermedia nel file del punto 4. Alcuni browser da scrivania la vanno a cercare da soli e nascondono il problema; telefoni e programmi no.
+- **Il certificato vale, ma il browser lo rifiuta per quel nome**: ci si sta collegando con un nome o un IP che non è nel `subjectAltName`. Si rifà dal punto 1 aggiungendolo.
+
+**I telefoni.** I PC del dominio ricevono la radice aziendale dai criteri di gruppo; i telefoni no, a meno che non siano gestiti da un sistema aziendale (MDM). Su quelli va installata **una volta la radice della CA aziendale** — non un file di NetStock — con gli stessi passi del paragrafo sopra: su Android *Impostazioni → Sicurezza → Altro → Installa certificato → Certificato CA*; su iOS si apre il file, si installa il profilo, e poi va attivato in *Generali → Info → Attendibilità certificati*.
+
+**Il rinnovo.** Alla scadenza (la data `notAfter` del punto 3) si ripete la procedura dal punto 1. E una cosa da non fare: dopo aver installato il certificato aziendale **non lanciare** `make certs-ca` né `./scripts/gen-selfsigned-cert.sh --rigenera`, che lo sostituirebbero con uno non aziendale. `./install.sh` e `bootstrap.sh` invece lo lasciano com'è. Anche `./uninstall.sh --tutto` cancella `certs/`: se si pensa di reinstallare, conviene prima copiarne il contenuto altrove.
 
 ## Disinstallazione
 
@@ -254,12 +349,12 @@ journalctl -u netstock-backup        # cosa ha fatto
 Chiamato da `install.sh`, oppure a mano se le dipendenze ci sono già:
 1. verifica Docker/Compose/RAM/disco;
 2. genera `.env` con segreti casuali e stampa **una sola volta** la password admin iniziale — salvarla subito;
-3. genera un certificato TLS self-signed per l'IP/hostname della macchina (da sostituire con uno emesso dalla CA aziendale prima della produzione);
+3. genera un certificato TLS self-signed per l'IP/hostname della macchina (da sostituire con uno emesso dalla CA aziendale prima della produzione: vedi [Con la CA aziendale](#con-la-ca-aziendale));
 4. avvia il database ed esegue le migration Alembic (schema + seed);
 5. se `EXTRACT_ENABLED=true`, scarica il modello indicato da `EXTRACT_MODEL` e avvia Ollama, con accelerazione GPU se ne rileva una;
 6. avvia l'intero stack e verifica `/health`.
 
-Al termine, l'applicazione è raggiungibile su `https://<IP-o-hostname-della-VM>`. Il browser mostra un avviso di sicurezza finché non si installa un certificato firmato dalla CA aziendale — è atteso con un certificato self-signed.
+Al termine, l'applicazione è raggiungibile su `https://<IP-o-hostname-della-VM>`. Il browser mostra un avviso di sicurezza finché non si installa un certificato firmato dalla CA aziendale — è atteso con un certificato self-signed. Come farlo: [Con la CA aziendale](#con-la-ca-aziendale).
 
 Al primo accesso l'utente `admin` deve cambiare la password (`must_change_password=true`).
 
