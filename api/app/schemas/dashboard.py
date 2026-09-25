@@ -12,6 +12,16 @@ class CategoryTotal(BaseModel):
     quantity: Decimal
 
 
+class LocationTotal(BaseModel):
+    location_id: uuid.UUID
+    location_code: str
+    location_name: str
+    quantity: Decimal
+    # Quante ubicazioni distinte contribuiscono: dice se dietro la barra c'è un
+    # magazzino con venti scaffali o un ripiano solo.
+    sublocations: int
+
+
 class ReconciliationErrorRow(BaseModel):
     catalog_item_id: uuid.UUID
     location_id: uuid.UUID | None
@@ -24,6 +34,7 @@ class ReconciliationErrorRow(BaseModel):
 
 class DashboardResponse(BaseModel):
     total_by_category: list[CategoryTotal]
+    total_by_location: list[LocationTotal]
     below_reorder: list[StockBalanceResponse]
     open_delivery_notes: int
     recent_movements: list[StockMovementResponse]

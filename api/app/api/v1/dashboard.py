@@ -32,6 +32,41 @@ _CATEGORY_TOTALS_QUERY = """
     ORDER BY SUM(v.qty_on_hand) DESC, v.category_code
 """
 
+# Giacenza per ubicazione, sommata al magazzino che la contiene.
+#
+# Il roll-up non è un dettaglio: le ubicazioni sono un albero (magazzino →
+# scaffale → contenitore) e la merce sta sugli scaffali. Raggruppando per
+# ubicazione foglia, un magazzino da mille pezzi diventa venti barrette da
+# cinquanta e non salta all'occhio niente — che è esattamente la domanda a cui
+# questo grafico deve rispondere. Dove le ubicazioni sono piatte, la radice di
+# ognuna è sé stessa e il risultato non cambia.
+#
+# Il LEFT JOIN sulle radici con COALESCE è la rete: un'ubicazione orfana — o
+# dentro un ciclo di `parent_id`, che niente vieta — non risale a nessuna
+# radice, e senza quello la sua merce sparirebbe dal grafico in silenzio.
+# Così compare come sé stessa.
+_LOCATION_TOTALS_QUERY = """
+    WITH RECURSIVE radici AS (
+        SELECT id, id AS radice_id FROM locations WHERE parent_id IS NULL
+        UNION ALL
+        SELECT figlio.id, r.radice_id
+        FROM locations figlio
+        JOIN radici r ON figlio.parent_id = r.id
+    )
+    SELECT radice.id AS location_id,
+           radice.code AS location_code,
+           radice.name AS location_name,
+           SUM(sb.quantity) AS quantity,
+           COUNT(DISTINCT sb.location_id) AS sublocations
+    FROM v_stock_balance sb
+    JOIN locations foglia ON foglia.id = sb.location_id
+    LEFT JOIN radici r ON r.id = foglia.id
+    JOIN locations radice ON radice.id = COALESCE(r.radice_id, foglia.id)
+    GROUP BY radice.id, radice.code, radice.name
+    HAVING SUM(sb.quantity) > 0
+    ORDER BY SUM(sb.quantity) DESC, radice.code
+"""
+
 # Joined to names because an anomaly identified only by UUIDs tells the admin
 # nothing about which model, in which location, is out of step.
 _RECONCILIATION_QUERY = """
@@ -48,6 +83,10 @@ _RECONCILIATION_QUERY = """
 async def get_dashboard(db: DbSession, user: CurrentUser) -> Any:
     total_by_category = [
         dict(row._mapping) for row in (await db.execute(text(_CATEGORY_TOTALS_QUERY)))
+    ]
+
+    total_by_location = [
+        dict(row._mapping) for row in (await db.execute(text(_LOCATION_TOTALS_QUERY)))
     ]
 
     below_reorder = [
@@ -101,6 +140,7 @@ async def get_dashboard(db: DbSession, user: CurrentUser) -> Any:
 
     return DashboardResponse(
         total_by_category=total_by_category,
+        total_by_location=total_by_location,
         below_reorder=below_reorder,
         open_delivery_notes=open_delivery_notes,
         recent_movements=recent_movements,

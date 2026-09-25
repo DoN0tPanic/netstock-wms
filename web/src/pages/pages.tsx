@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { AlertTriangle, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, CalendarClock, CheckCircle2, Columns3, PackageSearch, Plus, RotateCcw, ScrollText, ShieldAlert, SlidersHorizontal, Trash2, Truck, Undo2, Wrench } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { catalogApi, categoriesApi, deliveryNotesApi, exportApi, inventoryApi, locationsApi, movementsApi, suppliersApi, unitsApi, vendorsApi } from "../api";
 import {
   useCategories,
@@ -18,6 +18,7 @@ import {
 import { useTendinaPaginata } from "../api/tendina";
 import { useElencoPaginato, type ElencoPaginato } from "../api/elencoPaginato";
 import { COLONNE_MAGAZZINO, COLONNE_PREDEFINITE, leggiColonne, scriviColonne, type ColonnaMagazzino } from "./inventoryColumns";
+import { ubicazioniDelGrafico, type BarraUbicazione } from "./ubicazioniGrafico";
 import { percorsoUbicazione } from "../lib/locations";
 import { SceltaMultipla } from "../components/SceltaMultipla";
 import { CatalogItemModal } from "../components/forms/CatalogItemModal";
@@ -113,6 +114,10 @@ export function Dashboard() {
   if (query.isError || !query.data) return <ErrorMessage />;
   const data = query.data;
   const totaleGiacenza = data.total_by_category.reduce((somma, riga) => somma + Number(riga.quantity), 0);
+  const perUbicazione = ubicazioniDelGrafico(data.total_by_location);
+  const totalePerUbicazione = data.total_by_location.reduce((somma, riga) => somma + Number(riga.quantity), 0);
+  // Una barra sola non è un grafico: è un numero, e come numero si scrive.
+  const solaUbicazione = perUbicazione.length === 1 ? perUbicazione[0] : undefined;
   return (
     <Page
       title="Dashboard"
@@ -192,6 +197,46 @@ export function Dashboard() {
                 </>
               ) : (
                 <p className="py-6 text-center text-slate-500">Nessuna giacenza da mostrare: il grafico comparirà dopo il primo carico.</p>
+              )}
+            </div>
+          </Riquadro>
+
+          {/* Le ubicazioni sono un albero e la merce sta sugli scaffali: la
+              somma è per magazzino, se no un deposito da mille pezzi diventa
+              venti barrette da cinquanta e non salta all'occhio niente. Oltre
+              otto barre la coda si ripiega in una sola voce grigia: la domanda
+              è «quali sono i più carichi», e la risposta sta in cima.
+              Con una ubicazione sola non si disegna un grafico a una barra —
+              quello è un numero, e si scrive. */}
+          <Riquadro titolo="Giacenza per ubicazione">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              {perUbicazione.length === 0 ? (
+                <p className="py-6 text-center text-slate-500">Nessuna giacenza da mostrare: il grafico comparirà dopo il primo carico.</p>
+              ) : solaUbicazione ? (
+                <p className="py-4 text-center text-slate-700">
+                  Tutta la giacenza è in <strong>{solaUbicazione.location_name}</strong>: {formatQuantity(totalePerUbicazione, "pezzi")}
+                  {solaUbicazione.sublocations > 1 && <span className="block text-sm text-slate-500">distribuiti su {solaUbicazione.sublocations} ubicazioni interne</span>}
+                </p>
+              ) : (
+                <>
+                  <p className="mb-3 text-sm text-slate-600">{formatQuantity(totalePerUbicazione, "pezzi")} in totale · gli scaffali sono sommati al magazzino che li contiene</p>
+                  <ResponsiveContainer width="100%" height={Math.max(120, perUbicazione.length * 42 + 16)}>
+                    <BarChart data={perUbicazione} layout="vertical" margin={{ top: 4, right: 60, bottom: 4, left: 4 }}>
+                      <CartesianGrid horizontal={false} stroke="#e8e8e6"/>
+                      <XAxis type="number" hide/>
+                      <YAxis type="category" dataKey="location_name" width={200} tickLine={false} axisLine={false} tick={{ fill: "#52514e", fontSize: 13 }}/>
+                      <Tooltip cursor={{ fill: "rgba(15,23,42,0.04)" }} formatter={(value, _nome, voce) => {
+                        const riga = (voce as { payload?: BarraUbicazione })?.payload;
+                        const dettaglio = riga && !riga.coda && riga.sublocations > 1 ? ` · ${riga.sublocations} ubicazioni` : "";
+                        return [`${formatQuantity(Number(value), "pz")}${dettaglio}`, "In giacenza"] as [string, string];
+                      }}/>
+                      <Bar dataKey="quantity" radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
+                        {perUbicazione.map((riga) => <Cell key={riga.location_id} fill={riga.coda ? "#9b9a95" : "#2a6fb8"}/>)}
+                        <LabelList dataKey="quantity" position="right" fill="#0b0b0b" fontSize={13} formatter={(value: ReactNode) => formatQuantity(Number(value), "pz")}/>
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </>
               )}
             </div>
           </Riquadro>
