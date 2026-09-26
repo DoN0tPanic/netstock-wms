@@ -6,8 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import ItemCondition
 from app.models.movements import StockMovement
-from app.models.reservations import Reservation
-from app.models.reservations import ReservationStatus as ResStatus
 
 
 async def lock_item_location(
@@ -45,22 +43,17 @@ async def get_on_hand(
     return Decimal(inbound_total) - Decimal(outbound_total)
 
 
-async def get_reserved(db: AsyncSession, catalog_item_id: uuid.UUID) -> Decimal:
-    result = await db.execute(
-        select(func.coalesce(func.sum(Reservation.quantity), 0)).where(
-            Reservation.catalog_item_id == catalog_item_id,
-            Reservation.status == ResStatus.open,
-        )
-    )
-    return Decimal(result.scalar_one())
-
-
 async def get_available(
     db: AsyncSession,
     catalog_item_id: uuid.UUID,
     location_id: uuid.UUID | None,
     condition: ItemCondition,
 ) -> Decimal:
-    on_hand = await get_on_hand(db, catalog_item_id, location_id, condition)
-    reserved = await get_reserved(db, catalog_item_id)
-    return on_hand - reserved
+    """Quanto si può prelevare da un'ubicazione: la sua giacenza.
+
+    Era «giacenza meno prenotato», con le prenotazioni tolte dal prodotto
+    (migrazione 0010). Il vecchio calcolo, per inciso, sottraeva le
+    prenotazioni di tutte le ubicazioni dalla giacenza di una sola: una
+    prenotazione a Roma poteva bloccare uno scarico a Milano.
+    """
+    return await get_on_hand(db, catalog_item_id, location_id, condition)

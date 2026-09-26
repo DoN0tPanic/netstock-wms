@@ -31,7 +31,6 @@ _MESSAGGI: dict[str, str] = {
     "documents_sha256_key": "Questo documento è già in archivio.",
     "delivery_note_lines_qty_expected_check": "I pezzi attesi devono essere più di zero.",
     "delivery_note_lines_qty_received_check": "I pezzi ricevuti non possono essere negativi.",
-    "reservations_quantity_check": "La quantità prenotata deve essere più di zero.",
     "stock_movements_quantity_check": "La quantità deve essere più di zero.",
     "ck_movement_not_self": "Partenza e destinazione coincidono.",
     "ck_movement_has_direction": "Serve un'ubicazione di partenza o di arrivo.",

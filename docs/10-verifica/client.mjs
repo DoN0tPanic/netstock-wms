@@ -135,11 +135,10 @@ for (const [percorso, atteso, nome] of [
   ['/receive', /Ricevi merce/, 'ricezione merce'],
 ]) { await vai(percorso); ok(`pagina ${nome} si apre`, atteso.test(await testo())); }
 
-// Le prenotazioni non hanno una pagina: l'API c'è, il client no, e
-// `/reservations` ricade sulla dashboard. Si verifica il comportamento vero
-// invece di lasciare una prova sempre rossa, che insegna a non guardare.
+// Le prenotazioni sono state tolte dal prodotto (migrazione 0010): un
+// vecchio indirizzo salvato non deve aprire niente, ricade sul cruscotto.
 await vai('/reservations');
-ok('prenotazioni: nessuna pagina, si ricade sul cruscotto (lacuna nota)',
+ok('prenotazioni: tolte, il vecchio indirizzo ricade sul cruscotto',
    !/Prenotazioni/.test(await testo()));
 
 console.log('== Ricerca globale ==');

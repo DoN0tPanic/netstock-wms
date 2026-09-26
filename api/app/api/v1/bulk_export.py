@@ -28,7 +28,6 @@ from app.services.audit import write_audit
 from app.services.csv_export import (
     CONDITION_LABELS,
     LOCATION_TYPE_LABELS,
-    RESERVATION_STATUS_LABELS,
     csv_text,
 )
 
@@ -106,22 +105,6 @@ _FOGLI: tuple[_Foglio, ...] = (
         enums=(2,),
     ),
     _Foglio(
-        "prenotazioni.csv",
-        "Riferimento;Richiesta da;Codice articolo;Seriale;Quantità;Ubicazione;Stato;"
-        "Scade il;Creata da;Creata il;Note",
-        """
-        SELECT r.reference, r.requested_by, ci.part_number, su.serial_number, r.quantity,
-               l.code, r.status, r.expires_at, u.username, r.created_at, r.notes
-        FROM reservations r
-        JOIN catalog_items ci ON ci.id = r.catalog_item_id
-        LEFT JOIN stock_units su ON su.id = r.stock_unit_id
-        LEFT JOIN locations l ON l.id = r.location_id
-        JOIN users u ON u.id = r.created_by
-        ORDER BY r.created_at DESC
-        """,
-        enums=(6,),
-    ),
-    _Foglio(
         "fornitori.csv",
         "Nome;Partita IVA;Riferimento;Attivo;Note",
         "SELECT name, vat_number, contact_ref, is_active, notes FROM suppliers ORDER BY name",
@@ -148,7 +131,6 @@ _FOGLI: tuple[_Foglio, ...] = (
 _LABELS: dict[str, str] = {
     **CONDITION_LABELS,
     **LOCATION_TYPE_LABELS,
-    **RESERVATION_STATUS_LABELS,
 }
 
 

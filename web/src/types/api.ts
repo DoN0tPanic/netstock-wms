@@ -5,9 +5,8 @@ export type Decimal = number;
 export type UserRole = 'viewer' | 'operator' | 'admin';
 export type LocationType = 'warehouse' | 'shelf' | 'box' | 'remote_site' | 'transit';
 export type ItemCondition = 'new' | 'refurbished' | 'used' | 'faulty';
-export type UnitStatus = 'in_stock' | 'reserved' | 'issued' | 'in_rma' | 'scrapped' | 'lost';
+export type UnitStatus = 'in_stock' | 'issued' | 'in_rma' | 'scrapped' | 'lost';
 export type MovementType = 'receipt' | 'issue' | 'transfer' | 'return' | 'rma_out' | 'rma_in' | 'adjustment' | 'scrap';
-export type ReservationStatus = 'open' | 'fulfilled' | 'cancelled' | 'expired';
 export type TemplateDocType = 'device_label' | 'box_label' | 'delivery_note' | 'packing_list';
 export type Confidence = 'high' | 'medium' | 'low';
 export interface Timestamps { created_at: ISODateTime; updated_at: ISODateTime }
@@ -44,9 +43,9 @@ export interface FreeReceiveRequest { occurred_at?: ISODateTime; location_id: UU
 export interface FreeReceiveResponse { created_unit_ids: UUID[]; movement_ids: UUID[] }
 export interface StockUnit extends Timestamps { id: UUID; catalog_item_id: UUID; serial_number: string; mac_address: string | null; status: UnitStatus; condition: ItemCondition; location_id: UUID | null; delivery_note_line_id: UUID | null; purchase_date: ISODate | null; warranty_end: ISODate | null; contract_ref: string | null; notes: string | null; catalog_item?: CatalogItem; movements?: StockMovement[]; part_number?: string | null; catalog_item_name?: string | null; vendor_code?: string | null; delivery_note_number?: string | null; location_code?: string | null }
 export interface StockMovement { id: UUID; occurred_at: ISODateTime; type: MovementType; catalog_item_id: UUID; stock_unit_id: UUID | null; quantity: Decimal; condition: ItemCondition; location_from_id: UUID | null; location_to_id: UUID | null; delivery_note_id: UUID | null; reference: string | null; assignee: string | null; reason: string | null; reverses_id: UUID | null; performed_by: UUID; notes: string | null; created_at: ISODateTime; part_number?: string | null; serial_number?: string | null; location_from_code?: string | null; location_to_code?: string | null; performed_by_username?: string | null; is_reversed?: boolean }
-export interface StockAvailability { catalog_item_id: UUID; part_number: string; name: string; vendor_code: string; category_code: string; is_serialized: boolean; reorder_point: number | null; qty_on_hand: Decimal; qty_reserved: Decimal; qty_available: Decimal; below_reorder_point: boolean; locations?: Array<{ location_id: UUID; location_code: string; quantity: Decimal }> }
+export interface StockAvailability { catalog_item_id: UUID; part_number: string; name: string; vendor_code: string; category_code: string; is_serialized: boolean; reorder_point: number | null; qty_on_hand: Decimal; below_reorder_point: boolean; locations?: Array<{ location_id: UUID; location_code: string; quantity: Decimal }> }
 export interface MovementItem { unit_id?: UUID; catalog_item_id?: UUID; quantity?: Decimal; condition?: ItemCondition }
-export interface IssueRequest { occurred_at?: ISODateTime; location_from_id: UUID; reference: string; assignee?: string; items: MovementItem[]; reservation_id?: UUID; notes?: string }
+export interface IssueRequest { occurred_at?: ISODateTime; location_from_id: UUID; reference: string; assignee?: string; items: MovementItem[]; notes?: string }
 export interface BulkItemRequest { catalog_item_id: UUID; quantity: Decimal; condition: ItemCondition }
 // `/movements/transfer` and `/movements/return` take `unit_ids` + `bulk_items`
 // (never a generic `items` array) — verified against the real Pydantic
@@ -104,7 +103,6 @@ export interface DocumentAnalysis {
   error: string | null;
 }
 export interface AuditEntry { id: number; ts: ISODateTime; actor_id: UUID | null; actor_username: string; action: string; entity_type: string | null; entity_id: string | null; details: Record<string, unknown>; ip_address: string | null; user_agent: string | null }
-export interface AppSetting { key: string; value: unknown }
 export interface HealthStatus { status: string; database?: string; extraction?: string }
 export interface ReconciliationErrorRow { catalog_item_id: UUID; location_id: UUID | null; qty_ledger: string; qty_projection: string; part_number?: string | null; catalog_item_name?: string | null; location_code?: string | null }
 export interface DashboardSummary { total_by_category: Array<{ category_code: string; category_name: string; quantity: string }>; total_by_location: Array<{ location_id: UUID; location_code: string; location_name: string; quantity: string; sublocations: number }>; below_reorder: StockAvailability[]; open_delivery_notes: number; recent_movements: StockMovement[]; expiring_warranties: StockUnit[]; reconciliation_errors: number; reconciliation_error_rows: ReconciliationErrorRow[] }

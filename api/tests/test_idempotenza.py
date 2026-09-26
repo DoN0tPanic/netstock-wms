@@ -203,3 +203,35 @@ async def test_una_chiave_troppo_lunga_e_rifiutata(app_db_session) -> None:
             admin,
             _operazione(app_db_session, admin, articolo, location),
         )
+
+
+async def test_le_chiavi_vecchie_si_puliscono_le_recenti_restano(app_db_session) -> None:
+    # Senza pulizia la tabella crescerebbe di una riga per operazione, per
+    # sempre; ma una chiave recente deve restare, o non proteggerebbe niente.
+    from sqlalchemy import text
+
+    from app.idempotenza import elimina_chiavi_scadute
+    from app.models.idempotency import IdempotencyKey
+
+    admin, _, _ = await _prepara(app_db_session)
+    vecchia, recente = f"vecchia-{uuid.uuid4()}", f"recente-{uuid.uuid4()}"
+    for chiave in (vecchia, recente):
+        app_db_session.add(
+            IdempotencyKey(user_id=admin.id, key=chiave, route="/x", request_hash="h")
+        )
+    await app_db_session.flush()
+    await app_db_session.execute(
+        text("UPDATE idempotency_keys SET created_at = now() - interval '8 days' WHERE key = :k"),
+        {"k": vecchia},
+    )
+
+    tolte = await elimina_chiavi_scadute(app_db_session)
+
+    rimaste = set(
+        (await app_db_session.execute(
+            text("SELECT key FROM idempotency_keys WHERE key IN (:a, :b)"),
+            {"a": vecchia, "b": recente},
+        )).scalars()
+    )
+    assert tolte >= 1
+    assert rimaste == {recente}

@@ -110,8 +110,6 @@ class StockBalanceResponse(BaseModel):
     is_serialized: bool
     reorder_point: int | None
     qty_on_hand: Decimal
-    qty_reserved: Decimal
-    qty_available: Decimal
     below_reorder_point: bool
 
 
@@ -145,7 +143,6 @@ class IssueRequest(BaseModel):
     reference: Riferimento
     assignee: str | None = None
     items: list[UnitLineRequest | BulkLineRequest] = Field(min_length=1)
-    reservation_id: uuid.UUID | None = None
     notes: str | None = None
 
 

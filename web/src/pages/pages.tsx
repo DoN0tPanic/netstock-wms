@@ -38,7 +38,7 @@ import type { BulkItemRequest, CatalogItem, Category, DeliveryNote, InventoryRow
 // `lost` is only ever reached by reversing a carico (the adjust endpoint has
 // no UI), so it means "that receipt should never have been recorded" rather
 // than a piece gone missing — hence the wording.
-export const unitStatusLabels: Record<UnitStatus, string> = { in_stock: "In magazzino", reserved: "Prenotato", issued: "Consegnato", in_rma: "In RMA", scrapped: "Rottamato", lost: "Rimosso per errore di inserimento" };
+export const unitStatusLabels: Record<UnitStatus, string> = { in_stock: "In magazzino", issued: "Consegnato", in_rma: "In RMA", scrapped: "Rottamato", lost: "Rimosso per errore di inserimento" };
 export const conditionLabels: Record<ItemCondition, string> = { new: "Nuovo", refurbished: "Ricondizionato", used: "Usato", faulty: "Guasto" };
 const statusTone = (status: UnitStatus) => status === "scrapped" || status === "lost" ? "danger" : status === "in_stock" ? "success" : "warning";
 
@@ -381,7 +381,7 @@ function StockTable({
           label: "Disponibile",
           render: (row) => (
             <Badge tone={row.below_reorder_point ? "warning" : "success"}>
-              {formatQuantity(row.qty_available)}
+              {formatQuantity(row.qty_on_hand)}
             </Badge>
           ),
         },

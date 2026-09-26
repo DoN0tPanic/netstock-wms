@@ -63,8 +63,6 @@ def _ruolo_minimo(funzione) -> UserRole | None:
     ("modulo", "funzione", "atteso"),
     [
         # Amministrazione: la configurazione si legge e si scrive solo da admin.
-        ("app.api.v1.settings_router", "list_settings", UserRole.admin),
-        ("app.api.v1.settings_router", "update_setting", UserRole.admin),
         ("app.api.v1.ai", "stato", UserRole.admin),
         ("app.api.v1.ai", "scegli_modello", UserRole.admin),
         ("app.api.v1.maintenance", "stato_backup", UserRole.admin),

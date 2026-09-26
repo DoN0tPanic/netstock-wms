@@ -26,7 +26,8 @@ class ItemCondition(str, enum.Enum):
 
 class UnitStatus(str, enum.Enum):
     in_stock = "in_stock"
-    reserved = "reserved"
+    # «reserved» resta nel tipo del database (migrazione 0010) ma nessun
+    # percorso lo imposta più: le prenotazioni sono state tolte.
     issued = "issued"
     in_rma = "in_rma"
     scrapped = "scrapped"
@@ -43,12 +44,6 @@ class MovementType(str, enum.Enum):
     adjustment = "adjustment"
     scrap = "scrap"
 
-
-class ReservationStatus(str, enum.Enum):
-    open = "open"
-    fulfilled = "fulfilled"
-    cancelled = "cancelled"
-    expired = "expired"
 
 
 class TemplateDocType(str, enum.Enum):
@@ -76,9 +71,6 @@ unit_status_enum = SAEnum(
 )
 movement_type_enum = SAEnum(
     MovementType, name="movement_type", create_type=False, values_callable=_values
-)
-reservation_status_enum = SAEnum(
-    ReservationStatus, name="reservation_status", create_type=False, values_callable=_values
 )
 template_doc_type_enum = SAEnum(
     TemplateDocType, name="template_doc_type", create_type=False, values_callable=_values

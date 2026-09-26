@@ -33,7 +33,6 @@ CONDITION_LABELS: dict[str, str] = {
 }
 UNIT_STATUS_LABELS: dict[str, str] = {
     "in_stock": "In magazzino",
-    "reserved": "Prenotato",
     "issued": "Consegnato",
     "in_rma": "In RMA",
     "scrapped": "Rottamato",
@@ -46,14 +45,6 @@ LOCATION_TYPE_LABELS: dict[str, str] = {
     "remote_site": "Sede remota",
     "transit": "In transito",
 }
-RESERVATION_STATUS_LABELS: dict[str, str] = {
-    "open": "Aperta",
-    "fulfilled": "Evasa",
-    "cancelled": "Annullata",
-    "expired": "Scaduta",
-}
-
-
 def cell(value: Any) -> str:
     """Un valore del database come lo si vuole leggere in un foglio di calcolo.
 

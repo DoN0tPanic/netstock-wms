@@ -8,7 +8,6 @@ from app.models.enums import (
     ItemCondition,
     LocationType,
     MovementType,
-    ReservationStatus,
     TemplateDocType,
     UnitStatus,
     UserRole,
@@ -16,7 +15,6 @@ from app.models.enums import (
 from app.models.extraction import ExtractionRun, ExtractionTemplate
 from app.models.idempotency import IdempotencyKey
 from app.models.movements import StockMovement
-from app.models.reservations import Reservation
 from app.models.stock import StockUnit
 from app.models.users import Session, User
 
@@ -35,7 +33,6 @@ __all__ = [
     "Document",
     "StockUnit",
     "StockMovement",
-    "Reservation",
     "ExtractionTemplate",
     "ExtractionRun",
     "AuditLog",
@@ -45,6 +42,5 @@ __all__ = [
     "ItemCondition",
     "UnitStatus",
     "MovementType",
-    "ReservationStatus",
     "TemplateDocType",
 ]

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/stock", tags=["stock"])
 
 AVAILABILITY_QUERY = """
     SELECT catalog_item_id, part_number, name, vendor_code, category_code,
-           is_serialized, reorder_point, qty_on_hand, qty_reserved, qty_available,
+           is_serialized, reorder_point, qty_on_hand,
            below_reorder_point
     FROM v_item_availability v
     WHERE EXISTS (
@@ -68,8 +68,6 @@ STOCK_HEADERS = [
     "Fornitore",
     "Categoria",
     "Giacenza",
-    "Prenotato",
-    "Disponibile",
     "Sotto soglia",
 ]
 
@@ -89,8 +87,6 @@ async def stock_table(db: AsyncSession) -> list[list[Any]]:
             r["vendor_code"],
             r["category_code"],
             float(r["qty_on_hand"]),
-            float(r["qty_reserved"]),
-            float(r["qty_available"]),
             # Il testo, non il booleano: questa stessa riga finisce anche in un
             # foglio Excel, dove un bool diventerebbe VERO/FALSO.
             "Sì" if r["below_reorder_point"] else "No",

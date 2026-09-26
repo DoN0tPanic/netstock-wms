@@ -21,11 +21,11 @@ from app.config import get_settings
 from app.db import AsyncSessionLocal
 from app.errori_database import traduci
 from app.exceptions import AppError
+from app.idempotenza import elimina_chiavi_scadute
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIDMiddleware
 from app.services import ai_config
 from app.services.audit import write_audit
-from app.services.reservations import expire_reservations
 
 settings = get_settings()
 
@@ -44,14 +44,6 @@ def _configure_logging() -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
-
-
-async def _job_expire_reservations() -> None:
-    async with AsyncSessionLocal() as db:
-        count = await expire_reservations(db)
-        await db.commit()
-        if count:
-            structlog.get_logger("netstock.jobs").info("reservations_expired", count=count)
 
 
 async def _job_reconcile_stock() -> None:
@@ -93,6 +85,17 @@ async def _job_purge_sessions() -> None:
             text("DELETE FROM sessions WHERE expires_at < now() - interval '30 days'")
         )
         await db.commit()
+
+
+async def _job_purge_idempotency_keys() -> None:
+    # Le chiavi anti-doppione servono solo finché una ripetizione è plausibile:
+    # senza questa pulizia la tabella crescerebbe di una riga per operazione,
+    # per sempre.
+    async with AsyncSessionLocal() as db:
+        tolte = await elimina_chiavi_scadute(db)
+        await db.commit()
+        if tolte:
+            structlog.get_logger("netstock.jobs").info("idempotency_keys_purged", count=tolte)
 
 
 async def _job_purge_extraction_runs() -> None:
@@ -211,11 +214,11 @@ async def _warm_up_extraction_model() -> None:
 async def lifespan(app: FastAPI):
     _configure_logging()
     scheduler = AsyncIOScheduler(timezone=settings.tz)
-    scheduler.add_job(_job_expire_reservations, "cron", hour=2, minute=0)
     scheduler.add_job(_job_reconcile_stock, "cron", hour=2, minute=15)
     scheduler.add_job(_job_purge_sessions, "cron", hour=3, minute=0)
     scheduler.add_job(_job_purge_extraction_runs, "cron", hour=3, minute=5)
     scheduler.add_job(_job_purge_audit_log, "cron", hour=3, minute=10)
+    scheduler.add_job(_job_purge_idempotency_keys, "cron", hour=3, minute=15)
     scheduler.start()
     app.state.scheduler = scheduler
     warmup = asyncio.create_task(_warm_up_extraction_model())

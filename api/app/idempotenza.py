@@ -24,11 +24,13 @@ manda, non obbliga chi non la manda.
 
 import hashlib
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from pydantic import TypeAdapter
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +40,9 @@ from app.models.users import User
 
 INTESTAZIONE = "Idempotency-Key"
 LUNGHEZZA_MASSIMA = 200
+# Una ripetizione arriva nel giro di secondi o minuti: una settimana è ampia,
+# e dopo la chiave non protegge più niente.
+CONSERVAZIONE = timedelta(days=7)
 
 
 def _impronta(metodo: str, percorso: str, corpo: bytes) -> str:
@@ -123,3 +128,16 @@ async def _gia_eseguita(
         status_code=esistente.status_code or 200,
         headers={"Idempotent-Replayed": "true"},
     )
+
+
+async def elimina_chiavi_scadute(db: AsyncSession) -> int:
+    """Toglie le chiavi più vecchie della conservazione; restituisce quante."""
+    risultato = await db.execute(
+        # La durata come intervallo, e con il tipo dichiarato. Come testo il
+        # driver la rifiuta; senza tipo PostgreSQL la legge come una data, e
+        # `now() - data` è un intervallo da confrontare con una data. In tutti
+        # e due i casi la pulizia sarebbe fallita ogni notte, in silenzio.
+        text("DELETE FROM idempotency_keys WHERE created_at < now() - CAST(:finestra AS interval)"),
+        {"finestra": CONSERVAZIONE},
+    )
+    return risultato.rowcount or 0

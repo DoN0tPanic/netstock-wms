@@ -14,9 +14,7 @@ from app.api.v1 import (
     maintenance,
     movements,
     registries,
-    reservations,
     search,
-    settings_router,
     stock,
     units,
     users,
@@ -37,11 +35,9 @@ api_router.include_router(inventory.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(search.router)
 api_router.include_router(movements.router)
-api_router.include_router(reservations.router)
 api_router.include_router(extraction.router)
 api_router.include_router(users.router)
 api_router.include_router(audit.router)
-api_router.include_router(settings_router.router)
 api_router.include_router(maintenance.router)
 api_router.include_router(ai.router)
 api_router.include_router(bulk_export.router)

@@ -57,9 +57,10 @@ prova "unità" 200 GET "/units?page_size=5"
 prova "movimenti" 200 GET "/movements?page_size=5"
 prova "esportazione movimenti" 200 GET "/movements/export?format=csv"
 
-echo "== Bolle, prenotazioni, ricerca, cruscotto =="
+echo "== Bolle, ricerca, cruscotto =="
 prova "bolle" 200 GET "/delivery-notes?page_size=5"
-prova "prenotazioni" 200 GET "/reservations?page_size=5"
+# Tolte dal prodotto (migrazione 0010): l'indirizzo non deve rispondere.
+prova "prenotazioni tolte" 404 GET "/reservations?page_size=5"
 prova "ricerca globale" 200 GET "/search?q=${NETSTOCK_SERIALE:-A}"
 prova "cruscotto" 200 GET /dashboard
 prova "esportazione completa" 200 GET /export
@@ -74,7 +75,8 @@ echo "== Amministrazione =="
 prova "utenti" 200 GET "/users?page_size=5"
 prova "utenti compresi gli eliminati" 200 GET "/users?include_deleted=true"
 prova "registro di sicurezza" 200 GET "/audit?page_size=5"
-prova "impostazioni" 200 GET /settings
+# La tabella generica delle impostazioni è stata tolta: non comandava niente.
+prova "impostazioni generiche tolte" 404 GET /settings
 prova "stato delle copie" 200 GET /maintenance/backup
 prova "template di estrazione" 200 GET /extraction-templates
 
@@ -144,7 +146,6 @@ fi
 echo "== Lettura automatica =="
 prova "stato del modello" 200 GET /ai/stato
 prova "modello non installato rifiutato" 422 PUT /ai/modello '{"modello":"modello-che-non-esiste:99b"}'
-prova "chiave gestita da una pagina, non dalla tabella" 422 PUT "/settings/extraction_model" '{"value":"\"qwen3:4b\""}'
 
 echo "== Copie di sicurezza =="
 prova "parola di conferma sbagliata" 422 POST /maintenance/restore ''
@@ -198,7 +199,7 @@ if [ "$CODICE" = "201" ] && [ -n "$ID_PROVA" ]; then
   prova "non crea fornitori" 403 POST /suppliers '{"name":"Non deve nascere"}'
   prova "non vede gli utenti" 403 GET "/users?page_size=1"
   prova "non vede il registro di sicurezza" 403 GET "/audit?page_size=1"
-  prova "non tocca le impostazioni" 403 GET /settings
+  prova "non cambia il modello di lettura" 403 PUT /ai/modello '{"modello":"qwen3:4b"}'
   prova "non scarica una copia del database" 403 POST /maintenance/backup
   cp "$C_ADMIN" "$C"; rm -f "$C_ADMIN"
   # Disattivato, non cancellato: chi ha agito lascia righe di registro che lo

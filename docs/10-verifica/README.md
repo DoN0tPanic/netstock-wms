@@ -8,10 +8,10 @@ dice «funziona» senza il modo di riprovarlo invecchia il giorno dopo.
 export NETSTOCK_URL=https://indirizzo-della-tua-installazione
 export NETSTOCK_PASSWORD='…'          # dell'utente amministratore
 
-docs/10-verifica/endpoint.sh     # 60 chiamate all'API, esito atteso per ognuna
+docs/10-verifica/endpoint.sh     # chiamate all'API, esito atteso per ognuna
 docs/10-verifica/database.sh     # prova a violare le garanzie del database
 docs/10-verifica/container.sh    # spegne, uccide e rimuove i container
-node docs/10-verifica/client.mjs <cartella-scarichi>   # 49 prove in un browser vero
+node docs/10-verifica/client.mjs <cartella-scarichi>   # prove in un browser vero
 
 # Scrive nel registro: solo su un'istanza usa e getta, e lo pretende.
 NETSTOCK_SCRIVE=si node docs/10-verifica/flussi.mjs    # il giro completo della merce
@@ -39,9 +39,9 @@ un 200 dove serviva un 403 è un difetto, non un successo.
 | Anagrafiche | vendor, categorie, fornitori, ubicazioni, catalogo: elenco e ricerca 200 · risorsa inesistente **404** |
 | Magazzino | giacenza aggregata, per ubicazione, magazzino unificato, filtri, unità, movimenti 200 |
 | Esportazioni | giacenza, magazzino, movimenti, archivio completo 200 · filtro vuoto **422** (vedi §5) |
-| Bolle e ricerca | bolle, prenotazioni, ricerca globale, cruscotto 200 |
+| Bolle e ricerca | bolle, ricerca globale, cruscotto 200 · prenotazioni (tolte) **404** |
 | Regole di dominio | data nel futuro **422** · rettifica con motivazione troppo corta **422** |
-| Amministrazione | utenti (anche eliminati), registro, impostazioni, template, stato copie 200 |
+| Amministrazione | utenti (anche eliminati), registro, template, stato copie 200 · impostazioni generiche (tolte) **404** |
 | Salute | `/health` pubblica 200 · `/health/ready` autenticata 200 |
 
 ### Permessi, provati con un utente in sola lettura creato e poi rimosso
@@ -49,7 +49,6 @@ un 200 dove serviva un 403 è un difetto, non un successo.
 | Operazione | Atteso | Ottenuto |
 |---|---|---|
 | Leggere il magazzino | 200 | 200 |
-| Leggere le prenotazioni | 200 | 200 |
 | Elenco utenti | 403 | **403** |
 | Registro di sicurezza | 403 | **403** |
 | Creare un'ubicazione | 403 | **403** |
@@ -116,7 +115,7 @@ Non chiamate all'API: pulsanti premuti, file che arrivano sul disco.
 | Esportazioni | `magazzino.csv` scaricato, una riga per pezzo e colonna Note presente · archivio ZIP scaricato |
 | Dettaglio pezzo | cronologia presente · operazione scritta «Carico», non `receipt` |
 | Navigazione | movimenti, ubicazioni, bolle, catalogo, vendor, categorie, fornitori, ricezione: tutte si aprono |
-| Prenotazioni | nessuna pagina: si ricade sul cruscotto (lacuna nota, §5.3) |
+| Prenotazioni | tolte dal prodotto: il vecchio indirizzo ricade sul cruscotto |
 | Ricerca globale | un seriale parziale propone risultati |
 | Amministrazione | utenti, template, audit |
 | Copia di sicurezza | dati tecnici, spazio, tabelle, copie sul server, copia **scaricata davvero** e non vuota |
@@ -190,11 +189,10 @@ ed entrambe le rotte sono riservate agli amministratori.
 
 ### Da sapere
 
-3. **Le prenotazioni non hanno interfaccia.** L'API è completa
-   (`/reservations`, elenco e creazione) e il modello dati c'è, ma nel client
-   non esiste nessuna pagina: l'indirizzo `/reservations` ricade sulla
-   dashboard. Non è una regressione — la pagina non è mai stata scritta — ma
-   è una funzione raggiungibile solo via API.
+3. **Le prenotazioni sono state tolte** (migrazione 0010). Esistevano solo
+   nell'API — nessuna pagina le ha mai offerte — e in questo magazzino non
+   servono. Con loro è sparita la colonna «disponibile», che senza
+   prenotazioni coincideva con la giacenza.
 
 4. **Il filtro vuoto nell'esportazione risponde 422.** È voluto e resta così:
    l'endpoint dichiara quei parametri come UUID. È il client che non deve

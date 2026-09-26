@@ -275,12 +275,6 @@ async def issue_movement(
             notes=payload.notes,
             occurred_at=payload.occurred_at,
         )
-        if payload.reservation_id is not None and result:
-            from app.services.reservations import fulfil_reservation
-
-            await fulfil_reservation(
-                db, performer=user, reservation_id=payload.reservation_id, movement_id=result[0].id
-            )
         return result
 
     return await con_idempotenza(request, db, user, esegui)

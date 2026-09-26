@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ImageUp } from "lucide-react";
 import { adminApi, categoriesApi, extractionApi, usersApi, vendorsApi } from "../../api";
-import type { AppSetting, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FieldSpec, TemplateDocType, User, UserRole } from "../../types/api";
+import type { ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FieldSpec, TemplateDocType, User, UserRole } from "../../types/api";
 import { Badge, Button, Input, Modal, PasswordInput, Select, Table, useToast } from "../../components/ui";
 import { EXTRACTION_FILE_ACCEPT, prepareExtractionImage } from "../../components/scanner/PhotoExtract";
 import { formatDateTime } from "../../lib/format";
@@ -19,7 +19,6 @@ const traceLabels: Record<string, [string, string]> = {
   audit_log: ["operazione nel registro di sicurezza", "operazioni nel registro di sicurezza"],
   stock_movements: ["movimento di magazzino", "movimenti di magazzino"],
   delivery_notes: ["bolla registrata", "bolle registrate"],
-  reservations: ["prenotazione", "prenotazioni"],
   extraction_templates: ["template di estrazione", "template di estrazione"],
   extraction_runs: ["lettura di documenti", "letture di documenti"],
   app_settings: ["impostazione modificata", "impostazioni modificate"],
@@ -303,67 +302,16 @@ export function AuditAdmin() {
   );
 }
 export function SettingsAdmin() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const query = useQuery({
-    queryKey: ["settings"],
-    queryFn: adminApi.settings,
-  });
-  const [editing, setEditing] = useState<AppSetting | null>(null);
-  const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const open = (setting: AppSetting) => { setEditing(setting); setValue(JSON.stringify(setting.value, null, 2)); setError(""); };
-  const save = async () => {
-    if (!editing) return;
-    // Settings are stored as JSONB, so the value has to be valid JSON before
-    // it is worth sending — parsing here gives an immediate, precise error
-    // instead of a generic 422 from the API.
-    let parsed: unknown;
-    try { parsed = JSON.parse(value); } catch { setError("Il valore non è JSON valido. Il testo va fra virgolette, es. \"ciao\"; i numeri e true/false senza."); return; }
-    setBusy(true); setError("");
-    try {
-      await adminApi.updateSetting(editing.key, parsed);
-      toast.show("Impostazione salvata.", "success");
-      setEditing(null);
-      await queryClient.invalidateQueries({ queryKey: ["settings"] });
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Salvataggio non riuscito."); }
-    finally { setBusy(false); }
-  };
+  // Qui c'era anche una tabella generica «chiave / valore» con un editor JSON.
+  // Mostrava le due impostazioni del modello — che lì non si potevano cambiare,
+  // rimandava alla sezione qui sotto — e `warranty_alert_days`, che il codice
+  // non leggeva: cambiarla non spostava i 60 giorni della dashboard. Un
+  // comando che non comanda niente è peggio di nessun comando, perché si usa.
+  // Restano le due cose che servono davvero.
   return (
-    <Page title="Impostazioni" description="Parametri applicativi. Modificali solo se sai cosa fanno.">
-      {query.isLoading ? (
-        <Loading />
-      ) : query.isError || !query.data ? (
-        <ErrorMessage />
-      ) : (
-        <Table
-          rows={query.data}
-          keyOf={(row) => row.key}
-          empty="Nessuna impostazione applicativa."
-          columns={[
-            { key: "key", label: "Chiave", render: (row) => <strong className="font-mono text-sm">{row.key}</strong> },
-            {
-              key: "value",
-              label: "Valore",
-              render: (row) => <span className="font-mono text-sm">{JSON.stringify(row.value)}</span>,
-            },
-            { key: "actions", label: "", render: (row) => <Button variant="ghost" onClick={() => open(row)}>Modifica</Button> },
-          ]}
-        />
-      )}
-      {/* Copia e ripristino stanno qui e non in una voce di menù a parte: si
-          cercano dove si cercano le cose di sistema, e la sidebar è già stata
-          ridotta apposta a quattro voci operative. */}
+    <Page title="Impostazioni" description="Lettura automatica dei documenti e copie di sicurezza">
       <ModelliAdmin/>
       <BackupAdmin/>
-      <Modal open={editing !== null} title={`Modifica ${editing?.key ?? ""}`} onClose={() => !busy && setEditing(null)}>
-        <div className="space-y-3">
-          {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
-          <label className="block text-sm font-medium text-slate-700">Valore (JSON)<textarea className="mt-1 min-h-32 w-full rounded-lg border border-slate-300 p-3 font-mono text-sm" value={value} onChange={(e) => setValue(e.target.value)}/></label>
-          <div className="flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>Annulla</Button><Button loading={busy} onClick={() => void save()}>Salva</Button></div>
-        </div>
-      </Modal>
     </Page>
   );
 }
