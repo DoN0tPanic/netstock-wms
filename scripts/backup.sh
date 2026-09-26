@@ -28,13 +28,22 @@ source "$REPO_DIR/.env"
 eval "$DA_RIGA_DI_COMANDO"
 
 DUMP_FILE="$BACKUP_DIR/daily/netstock-${TIMESTAMP}.dump"
+# Il dump si scrive con un nome che non finisce in `.dump`, e prende il suo
+# solo dopo aver passato la verifica. Scritto subito al suo posto, un pg_dump
+# fallito — database fermo, disco pieno — lasciava fra le copie buone un file
+# vuoto: per `make backup-verify` e per la pagina dei backup era «l'ultima
+# copia», e non conteneva niente. È successo: due notti a database spento,
+# due file da 0 byte.
+IN_CORSO="$DUMP_FILE.in-corso"
+trap 'rm -f "$IN_CORSO"' EXIT
 
 echo "Backup di netstock in corso -> $DUMP_FILE"
 docker compose -f "$REPO_DIR/docker-compose.yml" exec -T db \
-  pg_dump -Fc -U "${POSTGRES_USER:-netstock}" "${POSTGRES_DB:-netstock}" > "$DUMP_FILE"
+  pg_dump -Fc -U "${POSTGRES_USER:-netstock}" "${POSTGRES_DB:-netstock}" > "$IN_CORSO"
 
 echo "Verifica integrità del dump..."
-docker compose -f "$REPO_DIR/docker-compose.yml" exec -T db pg_restore --list < "$DUMP_FILE" > /dev/null
+docker compose -f "$REPO_DIR/docker-compose.yml" exec -T db pg_restore --list < "$IN_CORSO" > /dev/null
+mv "$IN_CORSO" "$DUMP_FILE"
 echo "Dump verificato correttamente."
 
 if [ "$DAY_OF_MONTH" = "01" ]; then

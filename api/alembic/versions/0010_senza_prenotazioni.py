@@ -1,6 +1,6 @@
-"""Le prenotazioni escono dal prodotto, e con loro un'impostazione fantasma.
+"""Le prenotazioni escono dal prodotto.
 
-**Prenotazioni.** In questo magazzino non servono: la merce si ricepisce, si
+**Prenotazioni.** In questo magazzino non servono: la merce si riceve, si
 sposta e si consegna, non si impegna in anticipo. La funzione esisteva solo
 nell'API — nessuna pagina l'ha mai offerta — e il beta test ha trovato che
 accettava prenotazioni oltre la giacenza senza un avviso. Invece di
@@ -16,9 +16,13 @@ aggiornamento. Il valore «reserved» resta nel tipo `unit_status`: toglierlo
 vorrebbe dire ricostruire la colonna degli stati sotto le viste che la usano,
 un rischio senza guadagno visto che nessun percorso lo imposta più.
 
-**`warranty_alert_days`.** Una riga di `app_settings` che il codice non ha
-mai letto: la dashboard usa 60 giorni scritti nel codice. Si poteva
-cambiare dalla pagina delle impostazioni senza che cambiasse niente.
+**Nessuna riga esistente viene cancellata.** L'unica tabella tolta è
+`reservations`, e solo dopo aver verificato — con un lucchetto che impedisce
+scritture fra la verifica e l'eliminazione — che sia vuota. Una prima stesura
+cancellava anche `warranty_alert_days` da `app_settings`: una riga che nessuna
+versione del codice ha mai letto né creato. Inerte, ma pur sempre una riga
+esistente: la garanzia «l'aggiornamento non cancella dati» vale di più di una
+tabella in ordine, e la riga resta dov'è.
 
 Revision ID: 0010
 Revises: 0009
@@ -93,6 +97,11 @@ def upgrade() -> None:
             prenotazioni integer;
             prenotati integer;
         BEGIN
+            -- Il lucchetto rende la verifica una garanzia: fino alla fine
+            -- della transazione nessuno può inserire una prenotazione o
+            -- prenotare un pezzo, quindi quello che si elimina più sotto è
+            -- esattamente quello che si è contato qui — cioè niente.
+            LOCK TABLE reservations, stock_units IN SHARE ROW EXCLUSIVE MODE;
             SELECT count(*) INTO prenotazioni FROM reservations;
             SELECT count(*) INTO prenotati FROM stock_units WHERE status = 'reserved';
             IF prenotazioni > 0 OR prenotati > 0 THEN
@@ -112,7 +121,6 @@ def upgrade() -> None:
     op.execute("GRANT SELECT ON v_item_availability TO netstock_app")
     op.execute("DROP TABLE reservations")
     op.execute("DROP TYPE reservation_status")
-    op.execute("DELETE FROM app_settings WHERE key = 'warranty_alert_days'")
 
 
 def downgrade() -> None:
@@ -146,4 +154,8 @@ def downgrade() -> None:
     op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON reservations TO netstock_app")
     op.execute("DROP VIEW v_item_availability")
     op.execute(_VISTA_CON_PRENOTAZIONI)
-    op.execute("GRANT SELECT ON v_item_availability TO netstock_app")
+    # Gli stessi permessi che la vista aveva prima: la 0001 li dava con
+    # «ON ALL TABLES», che include le viste. Scrivere in una vista con
+    # GROUP BY è impossibile comunque, ma tornare indietro deve voler dire
+    # tornare esattamente a com'era, permessi compresi.
+    op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON v_item_availability TO netstock_app")

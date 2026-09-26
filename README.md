@@ -107,13 +107,26 @@ Su una macchina dove NetStock gira già, l'installatore non serve: salta tutto q
 | `./update.sh --si` | Non fa domande (per automazioni) |
 | `./update.sh --senza-backup` | Salta il dump. Sconsigliato: è l'unica rete sotto una migrazione |
 
-Nell'ordine: guarda cosa c'è di nuovo e lo mostra prima di scaricarlo, **fa e verifica un backup del database**, aggiorna il codice, aggiunge a `.env` le eventuali voci nuove *senza toccare quelle esistenti*, ricostruisce le immagini e riavvia. Le migrazioni partono con il container nuovo, che è l'unico a contenerle. Alla fine verifica `/health/ready`: se l'API non risponde, stampa il log e i due comandi esatti per tornare indietro — al commit di prima e, se serve, al dump appena fatto.
+Nell'ordine: guarda cosa c'è di nuovo e lo mostra prima di scaricarlo, **fa e verifica un backup del database**, aggiorna il codice, aggiunge a `.env` le eventuali voci nuove *senza toccare quelle esistenti*, ricostruisce le immagini e riavvia. Le migrazioni partono con il container nuovo, che è l'unico a contenerle, e girano tutte in una sola transazione: o passano tutte o il database resta com'era. Alla fine verifica che l'API risponda: se non risponde, stampa il log e i comandi esatti per tornare indietro (vedi sotto).
 
 Non tocca i dati né la configurazione, e si può rilanciare: se non c'è niente di nuovo lo dice, e al massimo propone di ricostruire (utile quando il codice è arrivato con un `git pull` a mano, o quando un aggiornamento si è interrotto a metà).
 
 Il backup finisce in `/var/backups/netstock`. Se lì non si può scrivere: `BACKUP_DIR="$HOME/netstock-backup" ./update.sh`.
 
 > Su un'installazione più vecchia di questo script, la prima volta: `git pull && ./update.sh` — il `pull` porta `update.sh`, e lo script poi propone di ricostruire.
+
+### Tornare alla versione di prima
+
+Le migrazioni si annullano, e annullarle non tocca le righe delle tabelle che restano: tolgono solo quello che la versione nuova aveva aggiunto. Conta l'ordine. Il codice di prima non conosce le revisioni più nuove e non riparte su uno schema aggiornato, quindi **prima lo schema, con l'immagine nuova, poi il codice**:
+
+```bash
+docker compose stop api
+docker compose run --rm --no-deps api alembic downgrade 0008   # la revisione di prima
+git checkout <commit di prima>
+docker compose up -d --build
+```
+
+La revisione e il commit di prima li stampa `update.sh` all'inizio («schema del database alla revisione …», «versione installata: …»); se l'aggiornamento non va a buon fine, stampa questi stessi comandi già compilati. Il dump fatto prima dell'aggiornamento resta l'ultima rete: `./scripts/restore.sh` riporta tutto a quel momento, e quindi perde quello che è stato registrato dopo.
 
 ## Portare dentro il magazzino che c'è già
 

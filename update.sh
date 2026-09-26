@@ -77,6 +77,31 @@ chiedi() {
   [[ "$risposta" =~ ^[SsYy] ]]
 }
 
+# A che revisione è lo schema, letta dal database e non dal codice: dopo il
+# `git merge` il codice dice già quella nuova, il database no finché le
+# migrazioni non sono passate. Vuota se il database non risponde.
+revisione_schema() {
+  docker compose exec -T db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT version_num FROM alembic_version"' \
+    2>/dev/null || true
+}
+
+# Il codice di prima non riparte su uno schema più nuovo di lui: alembic non
+# trova la revisione e l'API si ferma all'avvio. Se le migrazioni sono già
+# passate, quindi, lo schema va riportato indietro *prima* di cambiare codice,
+# e con l'immagine nuova — l'unica che sa come. Le migrazioni tornano indietro
+# senza toccare le righe delle tabelle che restano.
+come_tornare_indietro() {
+  errore "Per tornare alla versione di prima:"
+  if [ -n "$SCHEMA_ORA" ] && [ "$(revisione_schema)" != "$SCHEMA_ORA" ]; then
+    echo "    docker compose stop api && docker compose run --rm --no-deps api alembic downgrade $SCHEMA_ORA" >&2
+  fi
+  echo "    git checkout $VERSIONE_ORA && docker compose up -d --build" >&2
+  if [ -n "$DUMP" ]; then
+    echo "    ./scripts/restore.sh '$DUMP'   # solo se anche i dati sono compromessi" >&2
+  fi
+}
+
 # --------------------------------------------------- 1. che cosa c'è qui ---
 titolo "1/6  Che installazione è"
 
@@ -233,12 +258,16 @@ fi
 # ------------------------------------------------------- 3. backup ---------
 titolo "3/6  Backup"
 
+# Il dump si prende dal database in esecuzione, e la revisione dello schema
+# si legge da lì: se è fermo, lo si accende. `up -d` su un servizio già
+# acceso non fa nulla.
+docker compose up -d db >/dev/null
+until docker compose ps db | grep -q healthy; do sleep 2; done
+SCHEMA_ORA="$(revisione_schema)"
+[ -n "$SCHEMA_ORA" ] && ok "schema del database alla revisione $SCHEMA_ORA"
+
 DUMP=""
 if [ "$CON_BACKUP" = 1 ]; then
-  # Il dump si prende dal database in esecuzione: se è fermo, lo si accende
-  # solo per questo. `up -d` su un servizio già acceso non fa nulla.
-  docker compose up -d db >/dev/null
-  until docker compose ps db | grep -q healthy; do sleep 2; done
   if ! ESITO="$(./scripts/backup.sh 2>&1)"; then
     printf '%s\n' "$ESITO" | sed 's/^/    /' >&2
     errore "Il backup non è riuscito, quindi mi fermo prima di cambiare qualcosa."
@@ -325,11 +354,7 @@ if [ "$PRONTO" != 1 ]; then
   errore "L'API non risponde dopo due minuti. Ultime righe di log:"
   docker compose logs --tail=40 api 2>&1 | sed 's/^/    /' >&2
   echo >&2
-  errore "Per tornare alla versione di prima:"
-  echo "    git checkout $VERSIONE_ORA && docker compose up -d --build" >&2
-  if [ -n "$DUMP" ]; then
-    echo "    ./scripts/restore.sh '$DUMP'   # solo se anche i dati sono compromessi" >&2
-  fi
+  come_tornare_indietro
   exit 1
 fi
 ok "API avviata (e quindi migrazioni passate: senza, non partirebbe)"
@@ -347,8 +372,7 @@ done
 if [ ${#GUASTI[@]} -gt 0 ]; then
   errore "Questi servizi non sono in esecuzione: ${GUASTI[*]}"
   docker compose logs --tail=20 "${GUASTI[@]}" 2>&1 | sed 's/^/    /' >&2
-  errore "Per tornare alla versione di prima:"
-  echo "    git checkout $VERSIONE_ORA && docker compose up -d --build" >&2
+  come_tornare_indietro
   exit 1
 fi
 ok "servizi in esecuzione: db, api, web, caddy"
@@ -380,6 +404,11 @@ else
 fi
 echo "  https://${SITE_ADDRESS}"
 [ -n "$DUMP" ] && echo "  Backup di prima dell'aggiornamento: $DUMP"
+SCHEMA_ADESSO="$(revisione_schema)"
+if [ -n "$SCHEMA_ORA" ] && [ -n "$SCHEMA_ADESSO" ] && [ "$SCHEMA_ADESSO" != "$SCHEMA_ORA" ]; then
+  echo "  Schema del database: $SCHEMA_ORA → $SCHEMA_ADESSO"
+  echo "  (per tornare indietro: README, «Tornare alla versione di prima»)"
+fi
 if [ "$VERSIONE_NUOVA" != "$VERSIONE_ORA" ]; then
   echo
   echo "  Cosa è cambiato:"
