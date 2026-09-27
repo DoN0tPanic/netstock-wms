@@ -1,4 +1,4 @@
-.PHONY: install update uninstall test-db backup-timer backup-verify import-catalogo import-giacenza ai-report certs-ca up up-ai ollama-pull licenses check-sensitive gitleaks gitleaks-baseline down logs ps build migrate seed reconcile backup restore reset-data certs bootstrap fmt lint test
+.PHONY: install update uninstall test-db backup-timer backup-verify import-catalogo import-giacenza ai-report certs-ca up up-ai ollama-pull licenses licenses-check check-sensitive gitleaks gitleaks-baseline down logs ps build migrate seed reconcile backup restore reset-data certs bootstrap fmt lint test
 
 # Installazione da zero: dipendenze di sistema, permessi, primo avvio.
 install:
@@ -107,12 +107,18 @@ restore:
 reset-data:
 	./scripts/reset-transactional-data.sh
 
-# Cerca dati sensibili in ciò che verrebbe pubblicato: ragioni sociali e
-# seriali di documenti reali, chiavi, password, indirizzi della macchina.
-# Rigenera compliance/licenses.csv da cio' che e' davvero installato.
+# Rigenera compliance/licenses.csv da ciò che è davvero installato e
+# controlla che ogni licenza sia ammessa: lo stesso controllo del job
+# «Licenze» della CI. Servono l'immagine dell'API e web/node_modules.
 licenses:
+	./scripts/licenses.sh --scrivi
+
+# Il solo controllo, senza riscrivere l'inventario.
+licenses-check:
 	./scripts/licenses.sh
 
+# Cerca dati sensibili in ciò che verrebbe pubblicato: ragioni sociali e
+# seriali di documenti reali, chiavi, password, indirizzi della macchina.
 check-sensitive:
 	./scripts/check-sensitive.sh
 

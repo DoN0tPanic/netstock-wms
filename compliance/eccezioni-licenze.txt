@@ -1,0 +1,11 @@
+# Componenti ammessi con una dichiarazione di licenza che l'elenco non
+# riconosce da sola.
+#
+# Formato:  componente | licenza come la dichiara | perché è accettabile
+#
+# L'eccezione vale per quella dichiarazione esatta: se il componente cambia
+# licenza, decade, e il job «Licenze» della CI torna a fermarsi finché qualcuno
+# non la guarda di nuovo.
+
+pypdfium2 | BSD-3-Clause, Apache-2.0, dependency licenses | PDFium (BSD-3-Clause, Apache-2.0) più le librerie che incorpora — FreeType (FTL), ICU (Unicode), libjpeg-turbo, libpng, libtiff, OpenJPEG, lcms, zlib, abseil, AGG, fast_float, simdutf, llvm-libc — tutte permissive, con i testi nel pacchetto. Vedi LICENZE.md, §3.
+debian (base dell'immagine API) | misto (vedi compliance/LICENZE.md) | Programmi GPL e LGPL di Debian (bash, coreutils, glibc) eseguiti, non collegati al codice di NetStock: nessun obbligo per l'uso interno. Vedi LICENZE.md, §3.

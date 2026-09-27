@@ -1,78 +1,43 @@
-# Licenze
+# compliance/
 
-Tre file, tre ruoli distinti:
+**Per sapere se e come si può usare NetStock in azienda, si parte da [`LICENZE.md`](LICENZE.md).** Questo file spiega come si mantengono gli altri.
 
 | File | Cos'è |
 |---|---|
-| `allowed-licenses.txt` | Le licenze ammesse. La CI fallisce se ne compare una che non c'è. |
-| `licenses.csv` | L'inventario di ciò che è **davvero installato**, generato, non scritto a mano. |
-| `allowed-secrets.txt` | Valori che sembrano un segreto ma sono stati esaminati e non lo sono. |
+| [`LICENZE.md`](LICENZE.md) | Il documento per chi deve decidere: licenze, obblighi, attenzioni |
+| [`licenses.csv`](licenses.csv) | L'inventario di ciò che è **davvero installato**, generato e mai scritto a mano |
+| [`allowed-licenses.txt`](allowed-licenses.txt) | Le licenze ammesse, in sigle SPDX |
+| [`eccezioni-licenze.txt`](eccezioni-licenze.txt) | Componenti ammessi fuori elenco, ciascuno con il suo perché |
+| [`allowed-secrets.txt`](allowed-secrets.txt) | Valori che sembrano un segreto ma sono stati esaminati e non lo sono. Non riguarda le licenze: lo usano i controlli sui dati sensibili |
 
-Per rigenerare l'inventario dopo un aggiornamento di dipendenze:
+## Rigenerare e controllare
 
 ```bash
-make licenses
+make licenses-check   # controlla, senza cambiare file
+make licenses         # rigenera licenses.csv, poi controlla
 ```
 
-Legge dai pacchetti presenti nell'immagine e in `node_modules`. Scriverlo a mano
-significherebbe avere un elenco che invecchia in silenzio e dice il falso al
-primo `pip install`.
+Servono l'immagine dell'API (`make build`) e `web/node_modules` (`npm ci` in `web/`). I pacchetti Python si leggono dentro l'immagine con `scripts/licenze_python.py`, che usa solo la libreria standard. Le regole stanno in `scripts/licenze.py`, lo stesso script che gira in CI.
 
-## Cosa c'è dentro
+## Il controllo in CI
 
-375 componenti al momento dell'ultima generazione, tutti sotto licenza
-permissiva:
+Il job **«Licenze»**, a ogni push:
+1. lancia `scripts/test_licenze.py`, per vedere che il controllo fermi davvero GPL, AGPL, licenze sconosciute ed eccezioni scadute;
+2. installa le sole dipendenze di produzione in un ambiente pulito, e l'interfaccia dal lockfile;
+3. si ferma se:
+   - una licenza è fuori elenco e senza eccezione;
+   - un componente manca da `licenses.csv`;
+   - il modello predefinito ha una licenza non dichiarata;
+   - OpenCV comincia ad aprire video (ADR 0006).
 
-| Famiglia | Quanti | Note |
-|---|---|---|
-| MIT (tutte le grafie) | 286 | la grande maggioranza del frontend |
-| Apache-2.0 | ~30 | FastAPI, Tesseract, Caddy, OpenCV, il modello |
-| BSD-2 / BSD-3 | ~25 | asyncpg, pypdfium2, uvicorn |
-| ISC | ~25 | utilità npm |
-| MPL-2.0 | 1 | copyleft **per file**, non virale sul progetto |
-| PostgreSQL License | 1 | permissiva, simile a BSD |
-| PSF / Python-2.0 / Unlicense / CC0 | pochi | permissive |
+La licenza del modello non sta in nessun metadato. È dichiarata per famiglia in `scripts/licenze.py` (`MODELLI`), seguendo l'ADR 0005.
 
-**Nessuna GPL, AGPL, SSPL o licenza proprietaria** fra le dipendenze
-dichiarate. Verificato sull'installato, non sulla lista dei desideri.
+## Se il controllo si ferma
 
-## Le due cose che l'inventario non dice da solo
+- **Componente mancante dall'inventario**: `make licenses` e si committa `licenses.csv`. Succede quando cambia una dipendenza, anche una indiretta.
+- **Licenza non ammessa.** Prima si guarda cosa è: il dettaglio è nel pacchetto, non nei metadati. Poi le strade sono tre:
+  1. si sostituisce il componente;
+  2. se la licenza è permissiva ma scritta in modo nuovo, si aggiunge la sigla ad `allowed-licenses.txt`, o un sinonimo in `scripts/licenze.py`;
+  3. altrimenti si scrive un'eccezione in `eccezioni-licenze.txt`, con il motivo, e per un copyleft anche un ADR, come per FFmpeg.
 
-### FFmpeg dentro il wheel di OpenCV — LGPL
-
-`opencv-python-headless` si dichiara Apache-2.0, ed è vero per il codice
-OpenCV. Ma il wheel **contiene anche** le librerie FFmpeg (`libavcodec`,
-`libavformat`, `libswscale`), che sono LGPL-2.1+. I metadati dei pacchetti non
-lo mostrano: una scansione basata su di essi non lo troverebbe mai.
-
-`allowed-licenses.txt` esclude LGPL senza un ADR esplicito. L'ADR c'è:
-[`docs/09-adr/0006-ffmpeg-lgpl-in-opencv.md`](../docs/09-adr/0006-ffmpeg-lgpl-in-opencv.md).
-
-In breve: quelle librerie servono a leggere e scrivere **video**, e NetStock non
-ne apre nessuno — nessuna chiamata a `VideoCapture` o `VideoWriter` in tutto il
-progetto. Sono peso morto trasportato dal wheel.
-
-### L'immagine di base contiene software GPL
-
-`python:3.12-slim` è Debian, e Debian contiene GPL (bash, coreutils) e LGPL
-(glibc). Vale per qualunque immagine Docker basata su una distribuzione Linux.
-
-Non tocca il codice di NetStock: sono programmi separati, non modificati,
-eseguiti — non collegati al nostro. Diventa un tema solo **distribuendo
-l'immagine costruita** a terzi, dove valgono gli obblighi di quei pacchetti
-verso Debian. Questo repository distribuisce sorgente e `Dockerfile`, non
-immagini.
-
-## Se l'inventario cambia
-
-Un aggiornamento di dipendenza può introdurre una licenza nuova. La procedura:
-
-1. `make licenses` rigenera l'inventario;
-2. si guarda cosa è comparso in `licenses.csv`;
-3. se è nella whitelist, non serve altro;
-4. se non c'è: o si sostituisce la dipendenza, o si scrive un ADR che dice
-   perché è accettabile — come si è fatto per FFmpeg.
-
-L'ADR è il punto: una licenza fuori whitelist non è vietata per sempre, è
-vietata **in silenzio**. Motivarla per iscritto la rende una decisione invece di
-una svista.
+Una licenza fuori elenco non è vietata per sempre, è vietata **in silenzio**: motivarla per iscritto la rende una decisione invece di una svista.

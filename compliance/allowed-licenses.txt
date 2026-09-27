@@ -1,23 +1,37 @@
-# Whitelist licenze per NetStock.
-# La pipeline CI di scansione licenze deve fallire se una dipendenza,
-# Python o npm, dichiara una licenza non presente in questo elenco.
-# LGPL non è qui: è ammessa solo dietro ADR esplicito.
-#   ADR attivo: docs/09-adr/0006-ffmpeg-lgpl-in-opencv.md — FFmpeg incluso nel
-#   wheel di OpenCV, che nessun percorso del codice raggiunge.
+# Licenze ammesse per NetStock: permissive, senza costi né soglie d'uso.
 #
-# L'inventario di cio' che e' davvero installato sta in licenses.csv
-# (`make licenses` per rigenerarlo). Le note che i metadati dei pacchetti non
-# possono dare — come il caso FFmpeg — stanno in README.md.
+# Il job «Licenze» della CI fallisce se un componente — Python, npm, immagine,
+# modello — ne dichiara una che qui non c'è e non ha un'eccezione motivata in
+# eccezioni-licenze.txt. Il controllo è scripts/licenze.py, che riconduce i
+# nomi dei metadati («MIT License», «BSD License»…) a queste sigle SPDX.
+#
+# LGPL e GPL non sono qui: si ammettono solo dietro un ADR esplicito.
+#   ADR attivo: docs/09-adr/0006-ffmpeg-lgpl-in-opencv.md — FFmpeg incluso nel
+#   pacchetto di OpenCV, che nessun percorso del codice raggiunge.
+#
+# Cosa comporta ciascuna, per chi deve decidere: LICENZE.md.
 
+# Permissive: si usa, si modifica, si ridistribuisce; l'unico obbligo è
+# conservare l'avviso di copyright quando si ridistribuisce.
 MIT
-Apache-2.0
-Apache Software License
+MIT-0
+MIT-CMU
+ISC
 BSD-2-Clause
 BSD-3-Clause
-BSD License
-ISC
-Python Software Foundation License
-PSF
+# «BSD License» dei classificatori Python: una BSD, senza dire quale.
+BSD
+0BSD
+Zlib
+Apache-2.0
+PSF-2.0
+Python-2.0
 PostgreSQL
+
+# Pubblico dominio.
 Unlicense
+CC0-1.0
+
+# Copyleft limitato ai file della libreria stessa: obblighi solo per chi li
+# modifica e li ridistribuisce.
 MPL-2.0

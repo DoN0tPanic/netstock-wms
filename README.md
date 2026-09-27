@@ -391,6 +391,7 @@ Al primo accesso l'utente `admin` deve cambiare la password (`must_change_passwo
 | `make backup-verify` | Riapre l'ultimo backup in un database usa e getta e conta le righe |
 | `make test` | Test backend con coverage |
 | `make lint` | ruff + mypy |
+| `make licenses-check` / `make licenses` | Controlla le licenze di tutti i componenti / rigenera l'inventario ([`compliance/LICENZE.md`](compliance/LICENZE.md)) |
 
 ## Struttura del repository
 
@@ -403,7 +404,7 @@ netstock/
 ├── web/            Frontend React 18 + TypeScript + Vite + Tailwind
 ├── docs/09-adr/    Architecture Decision Records
 ├── scripts/        bootstrap, backup, restore, certificato, download modello
-├── compliance/     Licenze: whitelist, inventario generato, valori esaminati
+├── compliance/     Licenze e uso in azienda, inventario generato, elenco ammesso ed eccezioni
 ├── docker-compose.yml, docker-compose.gpu.yml, Caddyfile, .env.example
 ```
 
@@ -432,7 +433,7 @@ Impostare `EXTRACT_ENABLED=false` in `.env`: il gestionale funziona identico, se
 ## Documentazione
 
 - [`docs/09-adr/`](docs/09-adr/) — Architecture Decision Records: le scelte non ovvie e il perché
-- [`compliance/README.md`](compliance/README.md) — licenze di tutti i componenti, e le due cose che un inventario automatico non vede
+- [`compliance/LICENZE.md`](compliance/LICENZE.md) — licenze e uso in azienda: niente da pagare, quali obblighi, le due attenzioni. La CI le ricontrolla a ogni push
 
 ## Il perché delle scelte
 

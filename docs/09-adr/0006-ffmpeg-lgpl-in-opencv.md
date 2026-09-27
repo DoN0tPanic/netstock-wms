@@ -73,8 +73,10 @@ distribuito.
 
 ## Conseguenze
 
-`compliance/README.md` documenta la cosa accanto all'inventario, così chi guarda
-le licenze la trova senza doverla scoprire.
+`compliance/LICENZE.md` documenta la cosa accanto all'inventario, così chi guarda
+le licenze la trova senza doverla scoprire. Il job «Licenze» della CI verifica a
+ogni push che nessun percorso del codice apra video: se succede, si ferma e
+rimanda qui.
 
 Se un domani NetStock dovesse leggere video — filmati di ispezione, riprese da
 telecamera lato server — questa decisione va rivista: da quel momento il codice

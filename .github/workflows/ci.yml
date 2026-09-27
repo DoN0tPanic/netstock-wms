@@ -1,7 +1,7 @@
 name: CI
 
 # La specifica prevede da sempre una scansione dei segreti in CI; questo la
-# rende reale. I tre lavori girano in parallelo: non c'è motivo di aspettare i
+# rende reale. I quattro lavori girano in parallelo: non c'è motivo di aspettare i
 # test per sapere che è stata committata una chiave privata.
 on:
   push:
@@ -37,6 +37,41 @@ jobs:
         # (.sensitive-patterns) non c'è — è escluso da git di proposito — e lo
         # script lo dice invece di fingere di averlo controllato.
         run: ./scripts/check-sensitive.sh
+
+  licenze:
+    name: Licenze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Il controllo si vede fallire
+        # Prima di fidarsi del verde: le prove che licenze.py ferma GPL, AGPL,
+        # licenze sconosciute, modelli non verificati ed eccezioni scadute.
+        run: python -m unittest scripts/test_licenze.py
+      - name: Dipendenze di produzione, da sole
+        # Un ambiente a parte con quello che finisce nell'immagine e niente
+        # degli strumenti di sviluppo: è di questo che si dichiarano le licenze.
+        run: |
+          python -m venv /tmp/produzione
+          /tmp/produzione/bin/pip install --quiet --upgrade pip
+          /tmp/produzione/bin/pip install --quiet ./api
+      - name: Pacchetti del frontend
+        working-directory: web
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Licenze ammesse, eccezioni motivate, inventario aggiornato
+        # Fallisce se un componente dichiara una licenza fuori da
+        # compliance/allowed-licenses.txt senza eccezione motivata, se manca da
+        # compliance/licenses.csv, o se OpenCV comincia ad aprire video (ADR 0006).
+        run: |
+          /tmp/produzione/bin/python scripts/licenze_python.py > /tmp/licenze-python.csv
+          python scripts/licenze.py --python-csv /tmp/licenze-python.csv
 
   frontend:
     name: Frontend
