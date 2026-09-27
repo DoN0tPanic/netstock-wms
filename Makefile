@@ -111,14 +111,14 @@ reset-data:
 # finiscono nell'immagine — dopo aver cambiato le dipendenze in
 # api/pyproject.toml. Gira nella stessa immagine Python dell'API, perché il
 # risultato valga per lei, e tiene le versioni che ci sono già: per alzarne
-# una, `make lock PACCHETTO=nome`. click è fissato perché con la 8.5 pip-tools
+# una o più, `make lock PACCHETTO="nome altro"`. click è fissato perché con la 8.5 pip-tools
 # scrive nell'intestazione un `--no-index` che nessuno ha chiesto.
 PYTHON_IMMAGINE := $(shell grep -m1 -oE 'python:[^ ]+' api/Dockerfile)
 lock:
 	docker run --rm -v "$(CURDIR)/api:/w" -w /w -e UG="$$(id -u):$$(id -g)" $(PYTHON_IMMAGINE) sh -c '\
 	  pip install -q --root-user-action=ignore --disable-pip-version-check pip-tools==7.6.1 click==8.2.1 && \
 	  pip-compile --quiet --generate-hashes --strip-extras --output-file=requirements.txt \
-	    $(if $(PACCHETTO),--upgrade-package $(PACCHETTO)) pyproject.toml; \
+	    $(foreach p,$(PACCHETTO),--upgrade-package $(p)) pyproject.toml; \
 	  chown $$UG requirements.txt'
 
 # Rigenera compliance/licenses.csv da ciò che è davvero installato e

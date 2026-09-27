@@ -128,7 +128,10 @@ export function BarcodeCamera({ onDetected, onClose, continuo = false, progresso
       if (!attivo) return;
       setError('');
       const traccia = (videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks()[0];
-      setTorciaDisponibile(Boolean((traccia?.getCapabilities?.() as CapacitaEstese | undefined)?.torch));
+      // `torch` non è nei tipi standard: la variabile tipizzata la rende leggibile
+      // senza un'asserzione (le capacità reali sono assegnabili al tipo esteso).
+      const capacita: CapacitaEstese | undefined = traccia?.getCapabilities?.();
+      setTorciaDisponibile(Boolean(capacita?.torch));
       // L'elenco ha le etichette solo dopo che il permesso è stato dato: prima
       // sarebbero voci vuote fra cui non si può scegliere.
       const elenco = await navigator.mediaDevices.enumerateDevices();

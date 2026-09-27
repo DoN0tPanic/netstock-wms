@@ -22,14 +22,14 @@ senza costi. L'unico obbligo è conservare l'avviso di copyright e di licenza ne
 
 ## 2. Cosa usa, e con quali licenze
 
-L'inventario completo è in [`licenses.csv`](licenses.csv): per ogni componente, la versione, la licenza e l'origine. È generato dai pacchetti davvero installati, mai scritto a mano. Al 27/09/2026 conta **387 componenti**:
+L'inventario completo è in [`licenses.csv`](licenses.csv): per ogni componente, la versione, la licenza e l'origine. È generato dai pacchetti davvero installati, mai scritto a mano. Al 27/09/2026 conta **392 componenti**:
 - 50 pacchetti Python, cioè l'immagine che va in produzione;
-- 327 pacchetti npm, cioè l'interfaccia e gli strumenti per costruirla;
+- 332 pacchetti npm, cioè l'interfaccia e gli strumenti per costruirla;
 - 10 componenti di sistema (immagini, motore OCR, modello, NetStock stesso).
 
 | Licenza | Che tipo | Cosa comporta |
 |---|---|---|
-| MIT, MIT-0, MIT-CMU, ISC, BSD (2 e 3 clausole), 0BSD, Zlib | Permissive | Nessun obbligo per l'uso. Chi ridistribuisce conserva l'avviso di copyright |
+| MIT, MIT-0, MIT-CMU, ISC, BSD (2 e 3 clausole), 0BSD, Zlib, BlueOak-1.0.0 | Permissive | Nessun obbligo per l'uso. Chi ridistribuisce conserva l'avviso di copyright |
 | Apache-2.0 | Permissiva, con licenza sui brevetti | Come sopra. Chi ridistribuisce conserva anche l'eventuale file NOTICE |
 | PSF-2.0 / Python-2.0, PostgreSQL | Permissive | Come le precedenti |
 | Unlicense, CC0-1.0 | Pubblico dominio | Nessuno |

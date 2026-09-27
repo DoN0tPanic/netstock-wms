@@ -23,6 +23,9 @@ BSD-3-Clause
 BSD
 0BSD
 Zlib
+# Blue Oak Model License: permissiva, approvata dall'OSI, con licenza sui
+# brevetti (arriva con minimatch, dentro lo strumento di lint).
+BlueOak-1.0.0
 Apache-2.0
 PSF-2.0
 Python-2.0

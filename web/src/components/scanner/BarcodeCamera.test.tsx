@@ -34,7 +34,7 @@ beforeEach(() => {
 
 describe('BarcodeCamera', () => {
   it('legge un codice dopo l\'altro senza chiudersi', async () => {
-    const onDetected = vi.fn(() => 'valid' as EsitoLettura);
+    const onDetected = vi.fn((): EsitoLettura => 'valid');
     const onClose = vi.fn();
     render(<BarcodeCamera continuo onDetected={onDetected} onClose={onClose} progresso={{ letti: 0, attesi: 24 }}/>);
 
@@ -53,7 +53,7 @@ describe('BarcodeCamera', () => {
     // Il lettore rilegge lo stesso barcode a ogni fotogramma finché resta
     // davanti all'obiettivo: senza la finestra di silenzio, appoggiare il
     // telefono su un'etichetta genererebbe decine di letture identiche.
-    const onDetected = vi.fn(() => 'valid' as EsitoLettura);
+    const onDetected = vi.fn((): EsitoLettura => 'valid');
     render(<BarcodeCamera continuo onDetected={onDetected} onClose={() => {}}/>);
 
     await inquadra('ZZO0000TEST');
