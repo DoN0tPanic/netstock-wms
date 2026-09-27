@@ -9,6 +9,7 @@ import { formatDateTime } from "../../lib/format";
 import { ErrorMessage, Loading, Page } from "../common";
 import { BackupAdmin } from "./Backup";
 import { ModelliAdmin } from "./Modelli";
+import { VersioneAdmin } from "./Versione";
 const roleLabels: Record<UserRole, string> = { viewer: "Sola lettura", operator: "Operatore", admin: "Amministratore" };
 const emptyUser = { username: "", full_name: "", email: "", role: "operator" as UserRole, password: "" };
 // Nomi di tabella come li vede chi amministra, non come li vede il database:
@@ -309,7 +310,8 @@ export function SettingsAdmin() {
   // comando che non comanda niente è peggio di nessun comando, perché si usa.
   // Restano le due cose che servono davvero.
   return (
-    <Page title="Impostazioni" description="Lettura automatica dei documenti e copie di sicurezza">
+    <Page title="Impostazioni" description="Versione in esecuzione, lettura automatica dei documenti e copie di sicurezza">
+      <VersioneAdmin/>
       <ModelliAdmin/>
       <BackupAdmin/>
     </Page>

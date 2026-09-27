@@ -113,6 +113,8 @@ Non tocca i dati né la configurazione, e si può rilanciare: se non c'è niente
 
 Il backup finisce in `/var/backups/netstock`. Se lì non si può scrivere: `BACKUP_DIR="$HOME/netstock-backup" ./update.sh`.
 
+**Quale versione gira.** La pagina *Impostazioni* dice da quale commit è costruita l'installazione, quando, e se lo schema del database è quello che il codice si aspetta. Per confrontare produzione e sviluppo basta il commit: lo stesso commit è lo stesso programma. Se un browser tiene aperta l'interfaccia di prima di un aggiornamento, la stessa sezione chiede di ricaricare la pagina.
+
 **Le versioni sono bloccate.** L'aggiornamento installa esattamente quello che la CI ha provato:
 - i pacchetti Python, con le loro hash (`api/requirements.txt`);
 - i pacchetti npm, dal lockfile;

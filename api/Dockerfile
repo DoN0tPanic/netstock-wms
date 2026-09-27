@@ -7,6 +7,7 @@ WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv /opt/venv
@@ -17,6 +18,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 # `make lock` dopo aver toccato le dipendenze in pyproject.toml.
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+
+# Da quale commit è costruita l'immagine, e quando: la pagina Impostazioni lo
+# mostra, per capire quale versione gira in produzione e quale in sviluppo. Si
+# legge dal .git del repository — il contesto «git» in docker-compose.yml —
+# senza copiarlo nell'immagine; per questo l'immagine si costruisce con compose.
+RUN --mount=type=bind,from=git,target=/tmp/git \
+    { git -c safe.directory='*' --git-dir=/tmp/git log -1 \
+        --format='{"commit": "%h", "data_commit": "%cI", ' 2>/dev/null || printf '{'; \
+      printf '"costruita": "%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } > /versione.json
 
 FROM python:3.12.14-slim-trixie AS runtime
 
@@ -55,6 +65,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 WORKDIR /app
 COPY --chown=app:app . .
+COPY --from=builder /versione.json /app/versione.json
 
 USER app
 

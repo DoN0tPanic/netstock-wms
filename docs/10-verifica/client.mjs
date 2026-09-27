@@ -243,6 +243,15 @@ await new Promise(r => setTimeout(r, 1500));
 ok('il documento di prova è stato tolto',
    await page.evaluate(() => !document.querySelector('main').innerText.includes('bolla-di-verifica.pdf')));
 
+console.log('== Impostazioni: versione ==');
+await vai('/admin/settings');
+const paginaVersione = await testo();
+ok('sezione della versione presente', /Da quale codice è costruita/.test(paginaVersione));
+// Un'immagine costruita con compose porta il suo commit: «sconosciuto» qui vuol
+// dire che la build non ha visto il .git del repository.
+ok('dice da quale commit viene', /Commit\s+[0-9a-f]{7,}/.test(paginaVersione));
+ok('interfaccia e server dallo stesso commit', !/ricarica la pagina per usare quella aggiornata/.test(paginaVersione));
+
 console.log('== Impostazioni: lettura automatica ==');
 await vai('/admin/settings');
 const paginaImpostazioni = await testo();

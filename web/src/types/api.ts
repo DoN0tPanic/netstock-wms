@@ -111,6 +111,12 @@ export type SearchResultType = 'unit' | 'catalog_item' | 'delivery_note' | 'loca
 export interface SearchResult { type: SearchResultType; id: UUID; label: string; sublabel: string | null; path: string }
 export interface SearchResponse { results: SearchResult[] }
 
+/** Quale versione gira sul server: commit e date li scrive la build dell'immagine. */
+export interface Versione {
+  commit: string | null; data_commit: string | null; costruita: string | null; avviata: string;
+  schema_attuale: string | null; schema_previsto: string | null; python: string; postgresql: string;
+}
+
 export interface TabellaInfo { nome: string; byte: number; righe_stimate: number }
 export interface CopiaSulServer { nome: string; gruppo: string; byte: number; quando: number }
 export interface BackupStatus {

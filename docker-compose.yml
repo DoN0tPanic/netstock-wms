@@ -23,6 +23,10 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+      # Il .git del repository, per scrivere nell'immagine da quale commit viene
+      # (pagina Impostazioni). Si legge soltanto: non entra nell'immagine.
+      additional_contexts:
+        git: ./.git
     restart: unless-stopped
     depends_on:
       db:
@@ -65,6 +69,10 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      # Il .git del repository, per scrivere nell'immagine da quale commit viene
+      # (pagina Impostazioni). Si legge soltanto: non entra nell'immagine.
+      additional_contexts:
+        git: ./.git
     restart: unless-stopped
     networks: [frontend]
     security_opt: ["no-new-privileges:true"]
