@@ -4,6 +4,9 @@ import { PAGINA_TENDINA, tutteLeVoci, useTendinaPaginata } from './tendina';
 import type { Page } from '../types/api';
 
 type Voce = { id: string };
+// Il tipo della funzione che carica una pagina, preso dall'hook stesso: con
+// vitest 4 un `vi.fn<Carica>()` senza tipo non è più assegnabile a una funzione tipizzata.
+type Carica = Parameters<typeof useTendinaPaginata<Voce>>[0];
 const pagina = (voci: Voce[], total: number, page = 1): Page<Voce> => ({ items: voci, total, page, page_size: PAGINA_TENDINA });
 const nVoci = (da: number, quante: number) => Array.from({ length: quante }, (_, i) => ({ id: `id-${da + i}` }));
 
@@ -11,14 +14,14 @@ describe('tendina che carica a pagine', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  const primoGiro = async (carica: ReturnType<typeof vi.fn>) => {
+  const primoGiro = async (carica: Carica) => {
     const risultato = renderHook(() => useTendinaPaginata<Voce>(carica));
     await act(async () => { await vi.advanceTimersByTimeAsync(300); });
     return risultato;
   };
 
   it('aggiunge la pagina successiva senza ripetere quello che c’è già', async () => {
-    const carica = vi.fn()
+    const carica = vi.fn<Carica>()
       .mockResolvedValueOnce(pagina(nVoci(0, 25), 40))
       // Una voce creata nel frattempo fa scivolare le altre di un posto: la
       // pagina 2 riporta l'ultima della pagina 1.
@@ -35,7 +38,7 @@ describe('tendina che carica a pagine', () => {
   });
 
   it('non chiede altro quando ci sono già tutte', async () => {
-    const carica = vi.fn().mockResolvedValue(pagina(nVoci(0, 3), 3));
+    const carica = vi.fn<Carica>().mockResolvedValue(pagina(nVoci(0, 3), 3));
     const { result } = await primoGiro(carica);
 
     await act(async () => { result.current.caricaAltre(); await vi.advanceTimersByTimeAsync(0); });
@@ -48,7 +51,7 @@ describe('tendina che carica a pagine', () => {
     // sovrascriveva quella giusta: nella tendina comparivano le voci di
     // quello che si era appena finito di cancellare.
     let rispondiAllaPrima: (esito: Page<Voce>) => void = () => {};
-    const carica = vi.fn()
+    const carica = vi.fn<Carica>()
       .mockImplementationOnce(() => new Promise<Page<Voce>>((resolve) => { rispondiAllaPrima = resolve; }))
       .mockResolvedValueOnce(pagina([{ id: 'giusta' }], 1));
     const { result } = renderHook(() => useTendinaPaginata<Voce>(carica));
@@ -67,7 +70,7 @@ describe('tendina che carica a pagine', () => {
 
 describe('elenchi completi per le tendine native', () => {
   it('continua a chiedere pagine finché non le ha tutte', async () => {
-    const carica = vi.fn()
+    const carica = vi.fn<Carica>()
       .mockResolvedValueOnce({ items: nVoci(0, 200), total: 340, page: 1, page_size: 200 })
       .mockResolvedValueOnce({ items: nVoci(200, 140), total: 340, page: 2, page_size: 200 });
 
@@ -78,7 +81,7 @@ describe('elenchi completi per le tendine native', () => {
   it('si ferma se il server smette di dare voci, invece di girare a vuoto', async () => {
     // Il totale potrebbe contare righe che la pagina successiva non riporta:
     // senza questa uscita il ciclo non finirebbe mai.
-    const carica = vi.fn()
+    const carica = vi.fn<Carica>()
       .mockResolvedValueOnce({ items: nVoci(0, 200), total: 500, page: 1, page_size: 200 })
       .mockResolvedValueOnce({ items: nVoci(200, 30), total: 500, page: 2, page_size: 200 });
 

@@ -113,6 +113,13 @@ Non tocca i dati né la configurazione, e si può rilanciare: se non c'è niente
 
 Il backup finisce in `/var/backups/netstock`. Se lì non si può scrivere: `BACKUP_DIR="$HOME/netstock-backup" ./update.sh`.
 
+**Le versioni sono bloccate.** L'aggiornamento installa esattamente quello che la CI ha provato:
+- i pacchetti Python, con le loro hash (`api/requirements.txt`);
+- i pacchetti npm, dal lockfile;
+- le immagini Docker, con l'etichetta esatta.
+
+Le versioni nuove arrivano come proposte di Dependabot: una pull request alla volta, provata dalla CI prima di entrare.
+
 > Su un'installazione più vecchia di questo script, la prima volta: `git pull && ./update.sh` — il `pull` porta `update.sh`, e lo script poi propone di ricostruire.
 
 ### Tornare alla versione di prima
@@ -391,6 +398,7 @@ Al primo accesso l'utente `admin` deve cambiare la password (`must_change_passwo
 | `make backup-verify` | Riapre l'ultimo backup in un database usa e getta e conta le righe |
 | `make test` | Test backend con coverage |
 | `make lint` | ruff + mypy |
+| `make lock` | Ricalcola le versioni esatte delle dipendenze Python (`api/requirements.txt`) dopo averle cambiate in `pyproject.toml` |
 | `make licenses-check` / `make licenses` | Controlla le licenze di tutti i componenti / rigenera l'inventario ([`compliance/LICENZE.md`](compliance/LICENZE.md)) |
 
 ## Struttura del repository

@@ -1,4 +1,4 @@
-.PHONY: install update uninstall test-db backup-timer backup-verify import-catalogo import-giacenza ai-report certs-ca up up-ai ollama-pull licenses licenses-check check-sensitive gitleaks gitleaks-baseline down logs ps build migrate seed reconcile backup restore reset-data certs bootstrap fmt lint test
+.PHONY: install update uninstall test-db backup-timer backup-verify import-catalogo import-giacenza ai-report certs-ca up up-ai ollama-pull licenses licenses-check check-sensitive gitleaks gitleaks-baseline down logs ps build migrate seed reconcile backup restore reset-data certs bootstrap fmt lint test lock
 
 # Installazione da zero: dipendenze di sistema, permessi, primo avvio.
 install:
@@ -107,6 +107,20 @@ restore:
 reset-data:
 	./scripts/reset-transactional-data.sh
 
+# Ricalcola api/requirements.txt — le versioni esatte, con le hash, che
+# finiscono nell'immagine — dopo aver cambiato le dipendenze in
+# api/pyproject.toml. Gira nella stessa immagine Python dell'API, perché il
+# risultato valga per lei, e tiene le versioni che ci sono già: per alzarne
+# una, `make lock PACCHETTO=nome`. click è fissato perché con la 8.5 pip-tools
+# scrive nell'intestazione un `--no-index` che nessuno ha chiesto.
+PYTHON_IMMAGINE := $(shell grep -m1 -oE 'python:[^ ]+' api/Dockerfile)
+lock:
+	docker run --rm -v "$(CURDIR)/api:/w" -w /w -e UG="$$(id -u):$$(id -g)" $(PYTHON_IMMAGINE) sh -c '\
+	  pip install -q --root-user-action=ignore --disable-pip-version-check pip-tools==7.6.1 click==8.2.1 && \
+	  pip-compile --quiet --generate-hashes --strip-extras --output-file=requirements.txt \
+	    $(if $(PACCHETTO),--upgrade-package $(PACCHETTO)) pyproject.toml; \
+	  chown $$UG requirements.txt'
+
 # Rigenera compliance/licenses.csv da ciò che è davvero installato e
 # controlla che ogni licenza sia ammessa: lo stesso controllo del job
 # «Licenze» della CI. Servono l'immagine dell'API e web/node_modules.
@@ -124,14 +138,14 @@ check-sensitive:
 
 # Scansione segreti su tutta la storia, come in CI.
 gitleaks:
-	docker run --rm -v "$$PWD:/repo" -w /repo zricethezav/gitleaks:latest detect \
+	docker run --rm -v "$$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 detect \
 	  --source /repo --config /repo/.gitleaks.toml \
 	  --baseline-path /repo/.gitleaks-baseline.json --redact --no-banner --verbose
 
 # Riscrive l'elenco dei riscontri accettati: farlo significa dichiarare di
 # aver guardato ciò che contiene. Vedi .gitleaks-baseline.md.
 gitleaks-baseline:
-	docker run --rm -v "$$PWD:/repo" -w /repo zricethezav/gitleaks:latest detect \
+	docker run --rm -v "$$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 detect \
 	  --source /repo --config /repo/.gitleaks.toml --redact --no-banner \
 	  --report-path /repo/.gitleaks-baseline.json --exit-code 0
 

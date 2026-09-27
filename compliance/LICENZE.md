@@ -22,9 +22,9 @@ senza costi. L'unico obbligo è conservare l'avviso di copyright e di licenza ne
 
 ## 2. Cosa usa, e con quali licenze
 
-L'inventario completo è in [`licenses.csv`](licenses.csv): per ogni componente, la versione, la licenza e l'origine. È generato dai pacchetti davvero installati, mai scritto a mano. Al 27/09/2026 conta **388 componenti**:
-- 49 pacchetti Python, cioè l'immagine che va in produzione;
-- 329 pacchetti npm, cioè l'interfaccia e gli strumenti per costruirla;
+L'inventario completo è in [`licenses.csv`](licenses.csv): per ogni componente, la versione, la licenza e l'origine. È generato dai pacchetti davvero installati, mai scritto a mano. Al 27/09/2026 conta **387 componenti**:
+- 50 pacchetti Python, cioè l'immagine che va in produzione;
+- 327 pacchetti npm, cioè l'interfaccia e gli strumenti per costruirla;
 - 10 componenti di sistema (immagini, motore OCR, modello, NetStock stesso).
 
 | Licenza | Che tipo | Cosa comporta |

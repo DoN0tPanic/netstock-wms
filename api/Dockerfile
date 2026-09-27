@@ -1,4 +1,7 @@
-FROM python:3.12-slim AS builder
+# Versione esatta, Debian compresa: il client PostgreSQL più sotto viene dal
+# repository «trixie-pgdg», e una base che cambiasse Debian da sola lo
+# romperebbe. Gli aggiornamenti arrivano come proposte di Dependabot.
+FROM python:3.12.14-slim-trixie AS builder
 
 WORKDIR /build
 
@@ -9,11 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir .
+# Le versioni esatte, con le loro hash: l'immagine installa quello che la CI
+# ha provato, non l'ultima uscita il giorno della build. Si rigenera con
+# `make lock` dopo aver toccato le dipendenze in pyproject.toml.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12.14-slim-trixie AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \

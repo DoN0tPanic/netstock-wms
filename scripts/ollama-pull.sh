@@ -40,7 +40,10 @@ else
     RESTART_SERVICE=0
 fi
 
-docker run -d --name "$HELPER" -v "$VOLUME:/root/.ollama" ollama/ollama >/dev/null
+# La stessa versione del servizio, letta da compose: un helper `latest`
+# potrebbe scaricare modelli in un formato che il servizio non legge ancora.
+IMMAGINE=$(grep -oE 'ollama/ollama:[^[:space:]]+' docker-compose.yml | head -1)
+docker run -d --name "$HELPER" -v "$VOLUME:/root/.ollama" "${IMMAGINE:-ollama/ollama}" >/dev/null
 
 printf 'Attendo il server'
 for _ in $(seq 1 30); do
