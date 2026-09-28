@@ -409,6 +409,20 @@ if [ -d /run/systemd/system ] && ! systemctl is-enabled netstock-backup.timer >/
   nota "il backup notturno non è installato: 'make backup-timer' lo attiva."
 fi
 
+# La cache delle build e le immagini sostituite crescono a ogni aggiornamento,
+# e un giorno riempiono il disco: è successo, e a disco pieno il database non
+# scrive e i backup falliscono. Arrivati qui le immagini nuove girano e sono
+# verificate. Le immagini sostituite si tolgono solo se sono di NetStock:
+# compose le etichetta con il nome del progetto, e su una macchina condivisa
+# quelle degli altri non sono affar nostro. La cache delle build un'etichetta
+# non ce l'ha: di quella si toglie solo ciò che non si usa da tre giorni, così
+# la cache di oggi resta e tornare indietro, se servisse, è più rapido.
+PROGETTO="$(docker compose config 2>/dev/null | sed -n 's/^name: //p' | head -1)"
+LIBERATO="$( { docker builder prune -af --filter until=72h 2>/dev/null; \
+               docker image prune -f --filter "label=com.docker.compose.project=${PROGETTO:-netstock}" 2>/dev/null; } \
+             | grep -iE '^total' | awk '{print $NF}' | paste -sd+ - || true)"
+ok "pulizia di cache delle build e immagini vecchie${LIBERATO:+ ($LIBERATO)}"
+
 SITE_ADDRESS="$(grep '^SITE_ADDRESS=' .env | cut -d= -f2)"
 echo
 printf '%s================================================%s\n' "$B" "$Z"

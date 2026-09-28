@@ -113,6 +113,8 @@ Non tocca i dati né la configurazione, e si può rilanciare: se non c'è niente
 
 Il backup finisce in `/var/backups/netstock`. Se lì non si può scrivere: `BACKUP_DIR="$HOME/netstock-backup" ./update.sh`.
 
+**Pulizia.** Dopo un aggiornamento riuscito, `update.sh` toglie la cache delle build e le immagini inutilizzate da più di tre giorni: crescono a ogni aggiornamento, e a disco pieno il database non scrive più. La cache di oggi resta, per tornare indietro in fretta.
+
 **Quale versione gira.** La pagina *Impostazioni* dice da quale commit è costruita l'installazione, quando, e se lo schema del database è quello che il codice si aspetta. Per confrontare produzione e sviluppo basta il commit: lo stesso commit è lo stesso programma. Se un browser tiene aperta l'interfaccia di prima di un aggiornamento, la stessa sezione chiede di ricaricare la pagina.
 
 **Le versioni sono bloccate.** L'aggiornamento installa esattamente quello che la CI ha provato:
@@ -370,6 +372,15 @@ L'installatore propone un timer systemd che alle 02:30 copia il database; su un'
 Due cose che rendono quelle copie una garanzia invece di un proposito:
 
 - **Fuori dalla macchina.** Imposta `BACKUP_REMOTE` in `.env` (un percorso montato o un bersaglio rsync). Senza, la sola copia dei dati sta sullo stesso disco del database che dovrebbe proteggere: basta contro un errore, non contro un disco che muore. Se la copia remota non riesce, il backup risulta **fallito** — perché un fallimento silenzioso si scopre il giorno peggiore.
+- **Controllate dall'app.** Ogni giro scrive il suo esito in `.stato-backup.json`, nella cartella dei backup. L'app lo legge, insieme alle copie presenti e allo spazio su disco, e agli amministratori mostra in cima a ogni pagina un riquadro quando:
+  - l'ultima copia buona ha più di 36 ore, oppure è vuota;
+  - l'ultimo giro è fallito;
+  - la copia non è uscita dalla macchina;
+  - la prova di ripristino non riesce da due settimane;
+  - il disco supera l'85%;
+  - l'ora del server e quella del browser differiscono di più di due minuti.
+
+  Sono i guai già successi e passati inosservati: backup vuoti, disco riempito dalla cache delle build, orologio avanti di due ore. Il riquadro si nasconde per un giorno, e ricompare prima se arriva un problema nuovo.
 - **Leggibili solo dal proprietario.** Un dump contiene tutto il magazzino e gli hash delle password, il `.env` le password del database: nascono entrambi con permessi 600, e quelli fatti prima di questa regola si sistemano da soli, al primo backup e al primo aggiornamento. Su una macchina condivisa, gli altri utenti vedono che i file esistono, non cosa contengono.
 - **Riaperte ogni tanto.** Ogni sette giorni il dump appena fatto viene ripristinato in un database usa e getta e le righe si contano (`BACKUP_RESTORE_TEST=0` per saltarlo, `BACKUP_RESTORE_TEST_DAYS` per cambiare il ritmo). A comando: `make backup-verify`. Un backup mai ripristinato non è un backup, è un file di cui ci si fida.
 

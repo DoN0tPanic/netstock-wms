@@ -1,5 +1,5 @@
 import { ApiError, apiDownload, apiRequest } from './client';
-import type { AdjustRequest, ArchivedDocument, BackupStatus, ContoFornitore, RestoreResult, StatoAi, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite, Versione } from '../types/api';
+import type { AdjustRequest, ArchivedDocument, BackupStatus, ContoFornitore, RestoreResult, StatoAi, AuditEntry, AuthMe, CatalogItem, CatalogItemWrite, Category, CategoryWrite, ChangePasswordRequest, DashboardSummary, DeliveryNote, DeliveryNoteCreate, DeliveryNoteExtractionResult, DeliveryNoteLine, DocumentAnalysis, ExtractionResult, ExtractionTemplate, ExtractionTemplateWrite, FreeReceiveRequest, FreeReceiveResponse, HealthStatus, InventoryRow, IssueRequest, Location, LocationWrite, LoginRequest, Page, ReceiveRequest, ReceiveResponse, ReturnRequest, RmaMoveRequest, ScrapRequest, SearchResponse, StockAvailability, StockMovement, StockUnit, Supplier, SupplierWrite, TransferRequest, User, UserDeleteResult, Vendor, VendorWrite, Versione, AvvisiProduzione } from '../types/api';
 
 // Una chiave può portare più valori (`?location=a&location=b`): serve ai
 // filtri che accettano più scelte insieme.
@@ -81,6 +81,10 @@ export const maintenanceApi = {
   },
   restore: (file: File, conferma: string) => { const body = new FormData(); body.append('file', file); body.append('conferma', conferma); return apiRequest<RestoreResult>('/maintenance/restore', { method: 'POST', body }); },
 };
+export const avvisiApi = {
+  leggi: () => apiRequest<AvvisiProduzione>('/avvisi'),
+};
+
 export const versioneApi = {
   leggi: () => apiRequest<Versione>('/versione'),
 };

@@ -111,6 +111,10 @@ export type SearchResultType = 'unit' | 'catalog_item' | 'delivery_note' | 'loca
 export interface SearchResult { type: SearchResultType; id: UUID; label: string; sublabel: string | null; path: string }
 export interface SearchResponse { results: SearchResult[] }
 
+/** Un problema che l'amministratore deve vedere: backup, disco, orologio. */
+export interface Avviso { codice: string; gravita: 'critico' | 'attenzione'; titolo: string; dettaglio: string }
+export interface AvvisiProduzione { ora_server: string; avvisi: Avviso[] }
+
 /** Quale versione gira sul server: commit e date li scrive la build dell'immagine. */
 export interface Versione {
   commit: string | null; data_commit: string | null; costruita: string | null; avviata: string;

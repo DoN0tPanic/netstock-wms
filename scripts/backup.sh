@@ -43,7 +43,27 @@ DUMP_FILE="$BACKUP_DIR/daily/netstock-${TIMESTAMP}.dump"
 # copia», e non conteneva niente. È successo: due notti a database spento,
 # due file da 0 byte.
 IN_CORSO="$DUMP_FILE.in-corso"
-trap 'rm -f "$IN_CORSO"' EXIT
+SEGNO_PROVA="$BACKUP_DIR/.ultima-prova-ripristino"
+
+# L'esito di ogni giro, per gli avvisi dell'app: il servizio api legge questo
+# file dalla cartella montata in sola lettura, e da lì sa se l'ultimo backup è
+# fallito, se la copia è uscita dalla macchina, se la prova di ripristino
+# riesce. Dentro non c'è niente di riservato — date, un nome, esiti — quindi,
+# a differenza dei dump, resta leggibile: il container gira con un altro utente.
+STATO="$BACKUP_DIR/.stato-backup.json"
+REMOTO_ESITO="non tentato"
+if [ "${BACKUP_RESTORE_TEST:-1}" = "0" ]; then PROVA_RIPRISTINO="disattivata"; else PROVA_RIPRISTINO="attiva"; fi
+scrivi_stato() {
+  local codice="$1" prova=null byte=0
+  [ -f "$SEGNO_PROVA" ] && prova="\"$(date -u -d "@$(cat "$SEGNO_PROVA")" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)\""
+  [ -f "$DUMP_FILE" ] && byte=$(stat -c %s "$DUMP_FILE")
+  ( umask 022
+    printf '{"quando": "%s", "esito": "%s", "file": "%s", "byte": %s, "remoto": "%s", "prova_ripristino": "%s", "ultima_prova_ripristino": %s}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$codice" = 0 ] && echo riuscito || echo fallito)" \
+      "$(basename "$DUMP_FILE")" "$byte" "$REMOTO_ESITO" "$PROVA_RIPRISTINO" "$prova" > "$STATO.nuovo"
+  ) && mv "$STATO.nuovo" "$STATO"
+}
+trap 'codice=$?; rm -f "$IN_CORSO"; scrivi_stato "$codice"' EXIT
 
 echo "Backup di netstock in corso -> $DUMP_FILE"
 docker compose -f "$REPO_DIR/docker-compose.yml" exec -T db \
@@ -77,16 +97,20 @@ if [ -n "${BACKUP_REMOTE:-}" ]; then
     COMANDO=(cp "$DUMP_FILE" "$BACKUP_REMOTE")
   else
     echo "BACKUP_REMOTE è un bersaglio remoto ma rsync non è installato." >&2
+    REMOTO_ESITO="fallito"
     exit 1
   fi
   if ! "${COMANDO[@]}"; then
     # Il dump locale c'è, ma la copia che serve nel giorno brutto no: questo
     # deve risultare un fallimento, o `systemctl status` dirà verde per mesi.
     echo "BACKUP INCOMPLETO: il dump è in $DUMP_FILE ma non è uscito dalla macchina." >&2
+    REMOTO_ESITO="fallito"
     exit 1
   fi
+  REMOTO_ESITO="riuscito"
   echo "Copia remota completata."
 else
+  REMOTO_ESITO="non configurato"
   echo "Nota: BACKUP_REMOTE non impostata — la copia resta su questo disco."
   echo "      Se muore il disco, muore anche il backup. Vedi .env.example."
 fi
@@ -101,7 +125,6 @@ fi
 # domenica. Si guarda invece **quanto tempo è passato** dall'ultima riuscita:
 # una macchina spenta nel fine settimana la fa al primo avvio utile.
 PROVA="${1:-}"
-SEGNO_PROVA="$BACKUP_DIR/.ultima-prova-ripristino"
 GIORNI_FRA_PROVE="${BACKUP_RESTORE_TEST_DAYS:-7}"
 
 scaduta() {

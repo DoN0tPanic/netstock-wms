@@ -7,6 +7,8 @@ vi.mock('../hooks/useAuth', () => ({
   useAuth: () => ({ session: { full_name: 'Chi Guarda', role: 'admin' }, logout: vi.fn() }),
 }));
 vi.mock('./GlobalSearch', () => ({ GlobalSearch: () => <div/> }));
+// Gli avvisi hanno i loro test e chiedono dati al server: qui interessa la barra.
+vi.mock('./AvvisiProduzione', () => ({ AvvisiProduzione: () => null }));
 
 const { Layout } = await import('./Layout');
 

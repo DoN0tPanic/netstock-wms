@@ -79,6 +79,7 @@ prova "registro di sicurezza" 200 GET "/audit?page_size=5"
 prova "impostazioni generiche tolte" 404 GET /settings
 prova "stato delle copie" 200 GET /maintenance/backup
 prova "versione in esecuzione" 200 GET /versione
+prova "avvisi per l'amministratore" 200 GET /avvisi
 prova "template di estrazione" 200 GET /extraction-templates
 
 echo "== Salute =="
@@ -203,6 +204,7 @@ if [ "$CODICE" = "201" ] && [ -n "$ID_PROVA" ]; then
   prova "non cambia il modello di lettura" 403 PUT /ai/modello '{"modello":"qwen3:4b"}'
   prova "non scarica una copia del database" 403 POST /maintenance/backup
   prova "non vede la versione esatta" 403 GET /versione
+  prova "non vede gli avvisi di sistema" 403 GET /avvisi
   cp "$C_ADMIN" "$C"; rm -f "$C_ADMIN"
   # Disattivato, non cancellato: chi ha agito lascia righe di registro che lo
   # trattengono, e un account chiuso in più a ogni giro sarebbe sporcizia.

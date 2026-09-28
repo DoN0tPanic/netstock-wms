@@ -28,7 +28,7 @@ esito**, non quanti apparati ci fossero nel magazzino usato per provarlo.
 
 ---
 
-## 1. Endpoint — 61 prove, 0 fallite
+## 1. Endpoint — 63 prove, 0 fallite
 
 Ogni chiamata è verificata sul **codice atteso**, non sul fatto che risponda:
 un 200 dove serviva un 403 è un difetto, non un successo.
@@ -41,7 +41,7 @@ un 200 dove serviva un 403 è un difetto, non un successo.
 | Esportazioni | giacenza, magazzino, movimenti, archivio completo 200 · filtro vuoto **422** (vedi §5) |
 | Bolle e ricerca | bolle, ricerca globale, cruscotto 200 · prenotazioni (tolte) **404** |
 | Regole di dominio | data nel futuro **422** · rettifica con motivazione troppo corta **422** |
-| Amministrazione | utenti (anche eliminati), registro, template, stato copie, versione in esecuzione 200 · impostazioni generiche (tolte) **404** |
+| Amministrazione | utenti (anche eliminati), registro, template, stato copie, versione in esecuzione, avvisi per l'amministratore 200 · impostazioni generiche (tolte) **404** |
 | Salute | `/health` pubblica 200 · `/health/ready` autenticata 200 |
 
 ### Permessi, provati con un utente in sola lettura creato e poi rimosso
@@ -55,6 +55,7 @@ un 200 dove serviva un 403 è un difetto, non un successo.
 | Registrare merce | 403 | **403** |
 | Stato delle copie di sicurezza | 403 | **403** |
 | Versione esatta in esecuzione | 403 | **403** |
+| Avvisi di sistema (backup, disco) | 403 | **403** |
 
 ---
 

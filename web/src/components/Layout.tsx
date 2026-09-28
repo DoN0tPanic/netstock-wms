@@ -3,6 +3,7 @@ import { Boxes, FileText, FolderSearch, History, LayoutDashboard, MapPin, Menu, 
 import { NavLink, Outlet } from 'react-router-dom';
 import { Button, Modal } from './ui';
 import { GlobalSearch } from './GlobalSearch';
+import { AvvisiProduzione } from './AvvisiProduzione';
 import { useAuth } from '../hooks/useAuth';
 import { useBarraRidotta } from '../hooks/useBarraRidotta';
 import { useHotkeys } from '../hooks/useHotkeys';
@@ -57,7 +58,7 @@ export function Layout() {
         </>}
       </nav>
     </aside>
-    <main className={`p-4 transition-[margin] lg:p-8 ${scostamento}`}><Outlet/></main>
+    <main className={`p-4 transition-[margin] lg:p-8 ${scostamento}`}><AvvisiProduzione/><Outlet/></main>
     <Modal open={help} title="Scorciatoie da tastiera" onClose={() => setHelp(false)}><dl className="grid grid-cols-[auto_1fr] gap-3"><kbd>/</kbd><dd>Metti a fuoco la ricerca globale</dd><kbd>Invio</kbd><dd>Conferma un seriale durante la scansione</dd><kbd>Esc</kbd><dd>Chiude la finestra aperta</dd><kbd>?</kbd><dd>Apre questo riepilogo</dd></dl></Modal>
   </div>;
 }

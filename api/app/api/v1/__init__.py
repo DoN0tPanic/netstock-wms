@@ -4,6 +4,7 @@ from app.api.v1 import (
     ai,
     audit,
     auth,
+    avvisi,
     bulk_export,
     catalog_items,
     dashboard,
@@ -43,3 +44,4 @@ api_router.include_router(maintenance.router)
 api_router.include_router(ai.router)
 api_router.include_router(bulk_export.router)
 api_router.include_router(versione.router)
+api_router.include_router(avvisi.router)
