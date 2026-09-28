@@ -33,6 +33,31 @@ mapfile -t FILES < <(git ls-files --cached --others --exclude-standard | grep -v
 AMMESSI="compliance/allowed-secrets.txt"
 
 trovato=0
+
+# I valori già esaminati (compliance/allowed-secrets.txt) si tolgono **uno per
+# uno**, non per riga. Prima bastava che una riga contenesse un valore ammesso
+# per sparire tutta: una password vera scritta accanto a una di prova passava.
+# Ogni riscontro arriva come «posizione:valore»; $1 è l'espressione che
+# descrive la posizione (file e riga, o commit, file e riga), $2 dice se il
+# valore deve coincidere con uno ammesso (esatto: i seriali, che sono token) o
+# contenerlo (parte: una password di prova dentro `password = "…"`).
+esaminati_fuori() {
+  local posizione="$1" modo="$2"
+  [ -f "$AMMESSI" ] || { cat; return; }
+  awk -v elenco="$AMMESSI" -v pos="$posizione" -v modo="$modo" '
+    BEGIN { while ((getline l < elenco) > 0) if (l !~ /^[[:space:]]*(#|$)/) ok[++n] = l }
+    { v = $0; sub(pos, "", v)
+      for (i = 1; i <= n; i++)
+        if ((modo == "esatto" && v == ok[i]) || (modo == "parte" && index(v, ok[i]))) next
+      print }'
+}
+# Cosa si stampa: dove, mai che cosa. Il repository è pubblico e con lui i log
+# della CI: un controllo che ricopia il segreto trovato lo pubblica lui stesso,
+# e un seriale vero stampato qui finirebbe proprio dove non deve stare.
+POS_FILE='^[^:]*:[0-9]+:'
+POS_STORIA='^[0-9a-f]+:[^:]*:[0-9]+:'
+POS_MESSAGGIO='^[0-9]+:'
+
 controlla() {
   local etichetta="$1" pattern="$2"
   local esito
@@ -41,16 +66,14 @@ controlla() {
   # precisamente il posto dove un dato reale era già rientrato una volta,
   # copiato dentro un caso di prova mentre lo si scriveva. Meglio qualche
   # falso positivo su una password finta che nessun allarme su una vera.
-  # Le righe che contengono un valore già esaminato (compliance/allowed-secrets.txt)
-  # non vengono segnalate: è quello che permette di NON esentare intere cartelle.
-  local righe
-  righe=$(grep -niE "$pattern" "${FILES[@]}" 2>/dev/null || true)
-  [ -f "$AMMESSI" ] && righe=$(echo "$righe" | grep -vFf <(grep -vE '^\s*(#|$)' "$AMMESSI") || true)
-  if [ -n "$righe" ]; then
+  # I valori già esaminati non vengono segnalati (vedi esaminati_fuori): è
+  # quello che permette di NON esentare intere cartelle.
+  local riscontri
+  riscontri=$(grep -HnoiE "$pattern" "${FILES[@]}" 2>/dev/null | esaminati_fuori "$POS_FILE" parte)
+  if [ -n "$riscontri" ]; then
     trovato=1
-    echo "TROVATO — $etichetta:"
-    echo "$righe" | cut -d: -f1 | sort -u | sed 's/^/   /'
-    echo "$righe" | head -4 | sed 's/^/      /'
+    echo "TROVATO — $etichetta (file:riga, contenuto oscurato):"
+    echo "$riscontri" | cut -d: -f1,2 | sort -u | head -10 | sed 's/^/   /'
   fi
 }
 
@@ -99,26 +122,15 @@ done
 # somiglia in tutto a quelli già presenti.
 SERIALI='\b[A-Z]{2,4}[0-9]{4,5}[A-Z0-9]{3,5}\b|\bQ2[A-Z0-9]{2}-[A-Z0-9]{4}-[A-Z0-9]{4}\b'
 
-# Sull'elenco dei valori esaminati si filtra per riga intera: un seriale è un
-# token, non un frammento di riga come le password ammesse.
-dichiarati() {
-  if [ -f "$AMMESSI" ]; then
-    grep -vxFf <(grep -vE '^\s*(#|$)' "$AMMESSI") || true
-  else
-    cat
-  fi
-}
-
+# Un seriale si confronta per intero con quelli dichiarati: è un token, non un
+# frammento di riga come le password ammesse. E non si stampa: si dice dove sta.
 seriali_nei_file() {
   local nuovi
-  nuovi=$(grep -ohE "$SERIALI" "${FILES[@]}" 2>/dev/null | sort -u | dichiarati)
+  nuovi=$(grep -HnoE "$SERIALI" "${FILES[@]}" 2>/dev/null | esaminati_fuori "$POS_FILE" esatto)
   [ -z "$nuovi" ] && return
   trovato=1
-  echo "TROVATO — seriali non dichiarati:"
-  while IFS= read -r seriale; do
-    [ -z "$seriale" ] && continue
-    echo "   $seriale — $(grep -lF "$seriale" "${FILES[@]}" 2>/dev/null | head -3 | tr '\n' ' ')"
-  done <<< "$nuovi"
+  echo "TROVATO — seriali non dichiarati (file:riga, valore oscurato):"
+  echo "$nuovi" | cut -d: -f1,2 | sort -u | head -10 | sed 's/^/   /'
   echo "      Se è inventato, dichiaralo in $AMMESSI; se viene da un documento"
   echo "      vero, non deve stare qui."
 }
@@ -179,13 +191,13 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
   COMMIT=$(git rev-list --all)
   # `git grep` su più revisioni stampa `commit:file:riga:contenuto`.
   storia() {
-    local etichetta="$1" pattern="$2" righe
-    righe=$(git grep -I -inE "$pattern" $COMMIT -- ':!scripts/check-sensitive.sh' 2>/dev/null || true)
-    [ -f "$AMMESSI" ] && righe=$(echo "$righe" | grep -vFf <(grep -vE '^\s*(#|$)' "$AMMESSI") || true)
-    if [ -n "$righe" ]; then
+    local etichetta="$1" pattern="$2" riscontri
+    riscontri=$(git grep -I -noiE "$pattern" $COMMIT -- ':!scripts/check-sensitive.sh' 2>/dev/null \
+      | esaminati_fuori "$POS_STORIA" parte)
+    if [ -n "$riscontri" ]; then
       trovato=1; STORIA=1
-      echo "TROVATO in un commit passato — $etichetta:"
-      echo "$righe" | cut -d: -f1,2 | sort -u | head -3 | sed 's/^/   /'
+      echo "TROVATO in un commit passato — $etichetta (commit:file):"
+      echo "$riscontri" | cut -d: -f1,2 | sed -E 's/^([0-9a-f]{7})[0-9a-f]*/\1/' | sort -u | head -3 | sed 's/^/   /'
     fi
   }
   for i in "${!MODELLI[@]}"; do
@@ -193,11 +205,12 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
   done
 
   # Un seriale tolto ieri resta nel commit di ieri, ed è da lì che si recupera.
-  NUOVI=$(git grep -ohE "$SERIALI" $COMMIT -- ':!scripts/check-sensitive.sh' 2>/dev/null | sort -u | dichiarati)
+  NUOVI=$(git grep -noE "$SERIALI" $COMMIT -- ':!scripts/check-sensitive.sh' 2>/dev/null \
+    | esaminati_fuori "$POS_STORIA" esatto)
   if [ -n "$NUOVI" ]; then
     trovato=1; STORIA=1
-    echo "TROVATO in un commit passato — seriali non dichiarati:"
-    echo "$NUOVI" | head -5 | sed 's/^/   /'
+    echo "TROVATO in un commit passato — seriali non dichiarati (commit:file, valore oscurato):"
+    echo "$NUOVI" | cut -d: -f1,2 | sed -E 's/^([0-9a-f]{7})[0-9a-f]*/\1/' | sort -u | head -5 | sed 's/^/   /'
   fi
 
   # Un PDF aggiunto e cancellato subito dopo resta nel pacchetto: qui contano i
@@ -211,11 +224,14 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
   fi
 
   if [ -f "$ELENCO" ]; then
+    n=0
     while IFS= read -r riga; do
       [[ -z "${riga// }" || "$riga" == \#* ]] && continue
+      n=$((n + 1))
       if git grep -I -q -iE "$riga" $COMMIT -- ':!scripts/check-sensitive.sh' 2>/dev/null; then
         trovato=1; STORIA=1
-        echo "TROVATO in un commit passato (modello locale): $riga"
+        # Il modello non si stampa: contiene proprio i nomi da non pubblicare.
+        echo "TROVATO in un commit passato: riga $n di $ELENCO"
       fi
     done < "$ELENCO"
   fi
@@ -227,15 +243,21 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
   # d'ordine, il modello di una scheda video, il nome di un documento interno.
   # Un messaggio si legge come un file, si pubblica come un file, e va guardato
   # come un file.
-  MESSAGGI=$(git log --all --format='%H%n%B%n---fine-messaggio---')
+  MESSAGGI=$(git log --all --format='@@commit %H%n%B')
+  # Dai numeri di riga del testo di tutti i messaggi, i commit che li contengono.
+  commit_dei_messaggi() {
+    echo "$MESSAGGI" | awk -v righe="$(cut -d: -f1 | tr '\n' ' ')" '
+      BEGIN { n = split(righe, r, " "); for (i = 1; i <= n; i++) w[r[i]] = 1 }
+      /^@@commit / { h = substr($2, 1, 7); next }
+      (NR in w) { print h }' | sort -u
+  }
   messaggi() {
-    local etichetta="$1" pattern="$2" righe
-    righe=$(echo "$MESSAGGI" | grep -inE "$pattern" || true)
-    [ -f "$AMMESSI" ] && righe=$(echo "$righe" | grep -vFf <(grep -vE '^\s*(#|$)' "$AMMESSI") || true)
-    if [ -n "$righe" ]; then
+    local etichetta="$1" pattern="$2" riscontri
+    riscontri=$(echo "$MESSAGGI" | grep -noiE "$pattern" | esaminati_fuori "$POS_MESSAGGIO" parte)
+    if [ -n "$riscontri" ]; then
       trovato=1; STORIA=1
-      echo "TROVATO nel messaggio di un commit — $etichetta:"
-      echo "$righe" | head -3 | cut -c1-100 | sed 's/^/   /'
+      echo "TROVATO nel messaggio di un commit — $etichetta (commit, contenuto oscurato):"
+      echo "$riscontri" | commit_dei_messaggi | head -3 | sed 's/^/   /'
       echo "      I messaggi si riscrivono solo ricostruendo la storia: non basta"
       echo "      un commit nuovo che corregge quello vecchio."
     fi
@@ -243,11 +265,11 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
   for i in "${!MODELLI[@]}"; do
     messaggi "${ETICHETTE[$i]}" "${MODELLI[$i]}"
   done
-  SERIALI_MSG=$(echo "$MESSAGGI" | grep -ohE "$SERIALI" 2>/dev/null | sort -u | dichiarati)
+  SERIALI_MSG=$(echo "$MESSAGGI" | grep -noE "$SERIALI" 2>/dev/null | esaminati_fuori "$POS_MESSAGGIO" esatto)
   if [ -n "$SERIALI_MSG" ]; then
     trovato=1; STORIA=1
-    echo "TROVATO nel messaggio di un commit — seriali non dichiarati:"
-    echo "$SERIALI_MSG" | head -5 | sed 's/^/   /'
+    echo "TROVATO nel messaggio di un commit — seriali non dichiarati (commit, valore oscurato):"
+    echo "$SERIALI_MSG" | commit_dei_messaggi | head -5 | sed 's/^/   /'
   fi
   if [ -f "$ELENCO" ]; then
     n=0
@@ -256,7 +278,7 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
       n=$((n + 1))
       if echo "$MESSAGGI" | grep -q -iE "$riga"; then
         trovato=1; STORIA=1
-        echo "TROVATO nel messaggio di un commit (modello locale, riga $n): $riga"
+        echo "TROVATO nel messaggio di un commit: riga $n di $ELENCO"
       fi
     done < "$ELENCO"
   fi

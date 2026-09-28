@@ -17,8 +17,11 @@ if [ "$AVAILABLE_RAM_MB" -lt 3800 ]; then
 fi
 
 echo "== 2/5: generazione .env =="
+# Il .env contiene le password del database e la chiave delle sessioni: nasce
+# leggibile solo da chi installa. Con `cp` avrebbe preso i permessi del file
+# d'esempio, cioè leggibile da ogni utente della macchina.
 if [ ! -f .env ]; then
-  cp .env.example .env
+  install -m 600 .env.example .env
   POSTGRES_PASSWORD=$(openssl rand -hex 24)
   APP_DB_PASSWORD=$(openssl rand -hex 24)
   SECRET_KEY=$(openssl rand -hex 32)
@@ -42,6 +45,9 @@ if [ ! -f .env ]; then
 else
   echo ".env già presente, non sovrascritto."
 fi
+# Anche un .env di prima di questa regola: `sed -i` conserva i permessi, e
+# questi restano da sistemare una volta.
+chmod 600 .env
 
 echo "== 3/5: certificato TLS =="
 ./scripts/gen-selfsigned-cert.sh

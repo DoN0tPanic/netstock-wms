@@ -1,4 +1,16 @@
 .env
+# Le varianti del .env (locale, di produzione, copie a mano) contengono gli
+# stessi segreti: fuori da git tutte, tranne l'esempio.
+.env.*
+!.env.example
+# Chiavi, archivi di chiavi, dump e copie, ovunque stiano: il controllo dei
+# dati sensibili li rifiuta, ma è meglio che non arrivino nemmeno fra i file
+# da aggiungere.
+*.key
+*.p12
+*.pfx
+*.dump
+*.bak
 certs/
 *.pem
 __pycache__/

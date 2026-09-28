@@ -18,6 +18,14 @@ DAY_OF_MONTH="$(date +%d)"
 
 mkdir -p "$BACKUP_DIR/daily" "$BACKUP_DIR/monthly"
 
+# Un dump contiene tutto: magazzino, registro, hash delle password. Da qui in
+# poi i file nascono leggibili solo dal proprietario. Le cartelle restano come
+# sono: la pagina delle copie gira nel container dell'API, con un altro utente,
+# e le deve poter elencare — elencare, non leggere. Le copie fatte prima di
+# questa regola si sistemano a ogni giro.
+umask 077
+chmod 600 "$BACKUP_DIR"/daily/*.dump "$BACKUP_DIR"/monthly/*.dump 2>/dev/null || true
+
 # Le variabili passate a riga di comando vincono su quelle del file. Senza
 # questo `source` le sovrascrive in silenzio, e un comando che la
 # documentazione dichiara — `BACKUP_RESTORE_TEST=0 ./scripts/backup.sh` —

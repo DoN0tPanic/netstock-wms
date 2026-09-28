@@ -319,6 +319,14 @@ if [ ${#CHIAVI_NUOVE[@]} -gt 0 ]; then
   fi
 fi
 
+# Il .env contiene le password del database e la chiave delle sessioni: lo
+# legge solo il proprietario. Le installazioni nate prima di questa regola lo
+# avevano leggibile da ogni utente della macchina; si sistema qui, una volta.
+if [ "$(stat -c %a .env)" != "600" ]; then
+  chmod 600 .env
+  ok "permessi di .env ristretti al proprietario (600)"
+fi
+
 # ------------------------------------------------------- 5. riavvio --------
 titolo "5/6  Ricostruzione e riavvio"
 
