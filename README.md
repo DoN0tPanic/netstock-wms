@@ -124,6 +124,19 @@ Le versioni nuove arrivano come proposte di Dependabot: una pull request alla vo
 
 > Su un'installazione più vecchia di questo script, la prima volta: `git pull && ./update.sh` — il `pull` porta `update.sh`, e lo script poi propone di ricostruire.
 
+### L'aggiornamento non raggiunge GitHub
+
+Che `ping github.com` risponda non basta: git passa dalla porta 443 (HTTPS) o dalla 22 (SSH), che una rete aziendale può trattare diversamente. `update.sh` riporta il messaggio di git, e quello dice quale dei casi è:
+
+| Messaggio di git | Causa | Cosa fare |
+|---|---|---|
+| `Permission denied (publickey)` | Origine via SSH (`git@github.com:…`) senza una chiave registrata | Passare a HTTPS: `git remote set-url origin https://github.com/DoN0tPanic/netstock-wms.git` |
+| `Authentication failed` | Un token scaduto scritto nell'indirizzo | Lo stesso comando, che lo toglie |
+| `Failed to connect … port 443`, `timed out` | Firewall o proxy aziendale | `git config --global http.proxy http://<proxy>:<porta>`. Lo stesso proxy servirà a Docker per scaricare immagini e pacchetti |
+| `SSL certificate problem` | Il proxy ispeziona le connessioni cifrate | La CA aziendale fra quelle di sistema: copiarla in `/usr/local/share/ca-certificates/` e lanciare `sudo update-ca-certificates` |
+
+Prova veloce, senza git: `curl -sI https://github.com | head -1` deve rispondere `HTTP/2 200`.
+
 ### Tornare alla versione di prima
 
 Le migrazioni si annullano, e annullarle non tocca le righe delle tabelle che restano: tolgono solo quello che la versione nuova aveva aggiunto. Conta l'ordine. Il codice di prima non conosce le revisioni più nuove e non riparte su uno schema aggiornato, quindi **prima lo schema, con l'immagine nuova, poi il codice**:

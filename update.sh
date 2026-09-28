@@ -157,10 +157,17 @@ git remote get-url origin >/dev/null 2>&1 || {
   errore "Nessun repository di origine configurato: non so da dove scaricare."
   exit 1
 }
-git fetch --quiet origin 2>/dev/null || {
-  errore "Non riesco a contattare l'origine. Controlla la rete e riprova."
+# L'errore di git si mostra. «Controlla la rete» era la risposta anche quando la
+# rete funzionava e mancava una chiave SSH, un token valido o la CA aziendale —
+# e il ping a github.com, che passa, faceva pensare il contrario. Un token
+# scritto dentro l'indirizzo non si stampa.
+nascondi_token() { sed -E 's#(https?://)[^/@[:space:]]+@#\1***@#g'; }
+if ! ERRORE_GIT="$(git fetch --quiet origin 2>&1)"; then
+  errore "Non riesco a scaricare da $(git remote get-url origin | nascondi_token). Git dice:"
+  printf '%s\n' "$ERRORE_GIT" | nascondi_token | sed 's/^/    /' >&2
+  errore "Le cause più comuni, e cosa fare, sono nel README: «L'aggiornamento non raggiunge GitHub»."
   exit 1
-}
+fi
 
 REMOTO="origin/$RAMO"
 git rev-parse --verify --quiet "$REMOTO" >/dev/null || {
