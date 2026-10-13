@@ -78,7 +78,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   caddy:
-    image: caddy:2.11.4-alpine
+    image: caddy:2.11.7-alpine
     restart: unless-stopped
     ports:
       - "443:443"
