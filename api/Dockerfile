@@ -1,7 +1,7 @@
 # Versione esatta, Debian compresa: il client PostgreSQL più sotto viene dal
 # repository «trixie-pgdg», e una base che cambiasse Debian da sola lo
 # romperebbe. Gli aggiornamenti arrivano come proposte di Dependabot.
-FROM python:3.12.14-slim-trixie AS builder
+FROM python:3.12.15-slim-trixie AS builder
 
 WORKDIR /build
 
@@ -28,7 +28,7 @@ RUN --mount=type=bind,from=git,target=/tmp/git \
         --format='{"commit": "%h", "data_commit": "%cI", ' 2>/dev/null || printf '{'; \
       printf '"costruita": "%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } > /versione.json
 
-FROM python:3.12.14-slim-trixie AS runtime
+FROM python:3.12.15-slim-trixie AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
