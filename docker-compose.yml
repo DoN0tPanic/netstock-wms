@@ -96,7 +96,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   ollama:
-    image: ollama/ollama:0.34.4
+    image: ollama/ollama:0.40.2
     restart: unless-stopped
     profiles: ["ai"]
     environment:
