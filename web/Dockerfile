@@ -15,7 +15,7 @@ RUN --mount=type=bind,from=git,target=/tmp/git \
     npm run build
 
 # Ramo stabile di nginx (anni pari): il ramo 1.27 non riceveva più correzioni.
-FROM nginx:1.30.5-alpine3.24
+FROM nginx:1.30.6-alpine3.24
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
