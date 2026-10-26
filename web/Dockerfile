@@ -1,4 +1,4 @@
-FROM node:22.23.3-alpine3.24 AS build
+FROM node:22.23.4-alpine3.24 AS build
 RUN apk add --no-cache git
 WORKDIR /app
 # `npm ci` installa esattamente il lockfile, e si ferma se non corrisponde a
